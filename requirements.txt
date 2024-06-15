@@ -1,7 +1,7 @@
 numpy
 scipy
-sklearn
-pytorch
+scikit-learn
+torch
 torchvision
 matplotlib
 tensorboard
