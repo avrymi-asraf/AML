@@ -5,10 +5,11 @@ import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 
+
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-
+import pandas as pd
 
 ################### Complete the code below ###################
 # Define a CNN architecture
@@ -66,8 +67,7 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam()
 
 # Training loop
-val_losses = []
-val_accuracies = []
+record_data = pd.DataFrame({})
 num_epochs = 10
 for epoch in range(num_epochs):
     model.train()  # moves the model to training mode
