@@ -1,0 +1,11 @@
+numpy
+scipy
+sklearn
+pytorch
+torchvision
+matplotlib
+tensorboard
+wandb
+pandas
+plotly
+tqdm
