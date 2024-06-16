@@ -166,3 +166,5 @@ cython_debug/
 # exersice
 *.pdf
 data/
+# folders start with .
+.*/
