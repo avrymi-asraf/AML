@@ -1,3 +1,4 @@
+# %%
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -10,33 +11,37 @@ from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import pandas as pd
+import numpy as np
+import plotly.express as px
 
-################### Complete the code below ###################
-# Define a CNN architecture
-###############################################################
+
+# %%
 class CnnClssificationModel(nn.Module):
     def __init__(self):
         super(CnnClssificationModel, self).__init__()
-        self.conv1 = nn.Conv2d(1, 4, 3,stride=2) #4,13,13
-        self.conv2 = nn.Conv2d(4, 8, 3,stride=2) #8,6,6
-        self.conv3 = nn.Conv2d(8, 16, 3,stride=2) #16,2,2
-        self.f1 = nn.Linear(32,16)
-        self.f2 = nn.Linear(16,10)
+        self.conv1 = nn.Conv2d(1, 4, 3, stride=2)  # 4,13,13
+        self.conv2 = nn.Conv2d(4, 8, 3, stride=2)  # 8,6,6
+        self.conv3 = nn.Conv2d(8, 16, 3, stride=2)  # 16,2,2
+        self.f1 = nn.Linear(64, 10)
+        self.f2 = nn.Linear(32, 10)
         self.relu = nn.LeakyReLU()
-        self.activate= nn.Softmax()
-    def forword(self,x):
+        self.activate = nn.Softmax(dim=1)
+
+    def forward(self, x):
         x = self.conv1(x)
         x = self.relu(x)
         x = self.conv2(x)
         x = self.relu(x)
-        x = self.conv3(x).reshape(-1,32)
+        x = self.conv3(x).reshape(-1, 64)
         x = self.relu(x)
         x = self.f1(x)
-        x = self.relu(x)
-        x = self.f2(x)
+        # x = self.relu(x)
+        # x = self.f2(x)
         x = self.activate(x)
         return x
 
+
+# %%
 # Load MNIST dataset
 transform = transforms.Compose(
     [transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))]
@@ -48,7 +53,7 @@ train_dataset = torchvision.datasets.MNIST(
 # take a stratified subset of the training data, keeping only 5000 samples, with 500 samples per class
 train_targets = train_dataset.targets
 train_idx, _ = train_test_split(
-    range(len(train_targets)), train_size=2, stratify=train_targets
+    range(len(train_targets)), train_size=2000, stratify=train_targets
 )
 train_dataset = torch.utils.data.Subset(train_dataset, train_idx)
 train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
@@ -58,23 +63,32 @@ test_dataset = torchvision.datasets.MNIST(
 )
 test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 
+
+# %%
 ################### Complete the code below ###################
 # Initialize the model, loss function, and optimizer
 ################### Complete the code below ####################
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+device = "cuda" if torch.cuda.is_available() else "cpu"
 model = CnnClssificationModel().to(device)
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam()
+optimizer = optim.Adam(model.parameters())
 
+# %%
 # Training loop
-record_data = pd.DataFrame({})
-num_epochs = 10
+num_epochs = 20
+record_data = pd.DataFrame(
+    {"val_losses": float(), "val_accuracies": float(), "epoch_loss": float()},
+    index=np.arange(num_epochs),
+)
 for epoch in range(num_epochs):
     model.train()  # moves the model to training mode
     running_loss = 0.0
     for images, labels in tqdm(train_loader):
         images, labels = images.to(device), labels.to(device)
-        loss = criterion(model(images),labels)
+        loss = criterion(model(images), labels)
+        loss.backward()
+        optimizer.step()
+        model.zero_grad()
         running_loss += loss.item()
 
     # Validation
@@ -84,6 +98,7 @@ for epoch in range(num_epochs):
     val_loss = 0.0
     with torch.no_grad():  # Temporarily set all the requires_grad flags to false
         for images, labels in tqdm(test_loader):
+            images, labels = images.to(device), labels.to(device)
             outputs = model(images)
             loss = criterion(outputs, labels)
             val_loss += loss.item()
@@ -94,9 +109,9 @@ for epoch in range(num_epochs):
     epoch_loss = running_loss / len(train_loader)
     val_loss /= len(test_loader)
     accuracy = correct / total
-    val_losses.append(val_loss)
-    val_accuracies.append(accuracy)
+    record_data.iloc[epoch] = [val_loss, accuracy, epoch_loss]
 
-################### Complete the code below ###################
-# plot the validation loss and accuracy
-###############################################################
+# %%
+px.line(record_data).show()
+
+# %%
