@@ -168,3 +168,4 @@ cython_debug/
 data/
 # folders start with .
 .*/
+*.gdoc

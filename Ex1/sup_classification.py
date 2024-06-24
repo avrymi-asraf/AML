@@ -19,10 +19,10 @@ import plotly.express as px
 class CnnClssificationModel(nn.Module):
     def __init__(self):
         super(CnnClssificationModel, self).__init__()
-        self.conv1 = nn.Conv2d(1, 4, 3, stride=2)  # 4,13,13
-        self.conv2 = nn.Conv2d(4, 8, 3, stride=2)  # 8,6,6
-        self.conv3 = nn.Conv2d(8, 16, 3, stride=2)  # 16,2,2
-        self.f1 = nn.Linear(64, 10)
+        self.conv1 = nn.Conv2d(1, 8, 3, stride=2)  # 8,13,13
+        # self.conv2 = nn.Conv2d(4, 8, 3, stride=2)  # 8,6,6
+        self.conv3 = nn.Conv2d(8, 16, 3, stride=2)  # 16,6,6
+        self.f1 = nn.Linear(6 * 6 * 16, 32)
         self.f2 = nn.Linear(32, 10)
         self.relu = nn.LeakyReLU()
         self.activate = nn.Softmax(dim=1)
@@ -30,13 +30,13 @@ class CnnClssificationModel(nn.Module):
     def forward(self, x):
         x = self.conv1(x)
         x = self.relu(x)
-        x = self.conv2(x)
-        x = self.relu(x)
-        x = self.conv3(x).reshape(-1, 64)
+        # x = self.conv2(x)
+        # x = self.relu(x)
+        x = self.conv3(x).reshape(-1, 6 * 6 * 16)
         x = self.relu(x)
         x = self.f1(x)
-        # x = self.relu(x)
-        # x = self.f2(x)
+        x = self.relu(x)
+        x = self.f2(x)
         x = self.activate(x)
         return x
 
@@ -71,11 +71,11 @@ test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model = CnnClssificationModel().to(device)
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters())
+optimizer = optim.Adam(model.parameters(), lr=0.01)
 
 # %%
 # Training loop
-num_epochs = 20
+num_epochs = 30
 record_data = pd.DataFrame(
     {"val_losses": float(), "val_accuracies": float(), "epoch_loss": float()},
     index=np.arange(num_epochs),
