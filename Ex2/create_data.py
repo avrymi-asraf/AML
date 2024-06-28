@@ -5,7 +5,8 @@ from matplotlib.patches import Circle
 
 # region: Conditional Helpers
 
-def generate_points_on_ring(center, radius, thickness, num_points):
+
+def generate_points_on_ring(center, radius, thickness, num_points) -> np.ndarray:
     points = []
     while len(points) < num_points:
         r = np.random.uniform(radius - thickness / 2, radius + thickness / 2)
@@ -18,13 +19,15 @@ def generate_points_on_ring(center, radius, thickness, num_points):
 
 def sample_olympic_rings(num_points_per_ring, ring_thickness=0.1):
     centers = [(0, 0), (2, 0), (4, 0), (1, -1), (3, -1)]
-    colors = ['blue', 'black', 'red', 'yellow', 'green']
+    colors = ["blue", "black", "red", "yellow", "green"]
     radius = 1
     all_points = []
     all_labels = []
 
     for center, color in zip(centers, colors):
-        points = generate_points_on_ring(center, radius, ring_thickness, num_points_per_ring)
+        points = generate_points_on_ring(
+            center, radius, ring_thickness, num_points_per_ring
+        )
         labels = [color] * num_points_per_ring
         all_points.extend(points)
         all_labels.extend(labels)
@@ -35,6 +38,7 @@ def sample_olympic_rings(num_points_per_ring, ring_thickness=0.1):
 # endregion: Conditional Helpers
 
 # region: Unconditional Helpers
+
 
 def point_in_ring(x, y, center, radius, thickness):
     distance = np.sqrt((x - center[0]) ** 2 + (y - center[1]) ** 2)
@@ -71,11 +75,16 @@ def create_olympic_rings(n_points, ring_thickness=0.25, verbose=True):
         colors = labels
         if len(sampled_points) > 10000:
             rand_idx = np.random.choice(len(sampled_points), 10000, replace=False)
-            plt.scatter(np.array(x)[rand_idx], np.array(y)[rand_idx], s=1, c=np.array(colors)[rand_idx])
+            plt.scatter(
+                np.array(x)[rand_idx],
+                np.array(y)[rand_idx],
+                s=1,
+                c=np.array(colors)[rand_idx],
+            )
         else:
             plt.scatter(x, y, s=1, c=colors)
-        plt.gca().set_aspect('equal', adjustable='box')
-        plt.title('Numpy Sampled Olympic Rings')
+        plt.gca().set_aspect("equal", adjustable="box")
+        plt.title("Numpy Sampled Olympic Rings")
         plt.show()
 
     sampled_points = np.asarray(sampled_points)
@@ -86,7 +95,9 @@ def create_olympic_rings(n_points, ring_thickness=0.25, verbose=True):
 
     sampled_points = np.asarray(sampled_points)
     # normalize data
-    sampled_points = (sampled_points - np.mean(sampled_points, axis=0)) / np.std(sampled_points, axis=0)
+    sampled_points = (sampled_points - np.mean(sampled_points, axis=0)) / np.std(
+        sampled_points, axis=0
+    )
 
     return sampled_points, labels, int_to_label
 
@@ -94,7 +105,9 @@ def create_olympic_rings(n_points, ring_thickness=0.25, verbose=True):
 def create_unconditional_olympic_rings(n_points, ring_thickness=0.25, verbose=True):
     centers = [(0, 0), (2, 0), (4, 0), (1, -1), (3, -1)]
     radius = 1
-    data = generate_points_on_rings__unconditional(centers, radius, ring_thickness, n_points)
+    data = generate_points_on_rings__unconditional(
+        centers, radius, ring_thickness, n_points
+    )
     if verbose:
         x, y = zip(*data)
         if len(data) > 10000:
@@ -102,8 +115,8 @@ def create_unconditional_olympic_rings(n_points, ring_thickness=0.25, verbose=Tr
             plt.scatter(np.array(x)[rand_idx], np.array(y)[rand_idx], s=1)
         else:
             plt.scatter(x, y, s=1)
-        plt.gca().set_aspect('equal', adjustable='box')
-        plt.title('Numpy Sampled Olympic Rings')
+        plt.gca().set_aspect("equal", adjustable="box")
+        plt.title("Numpy Sampled Olympic Rings")
         plt.show()
     data = np.asarray(data)
     # normalize data
