@@ -5,7 +5,6 @@ from torchvision.models import resnet18
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-
 class Encoder(nn.Module):
     def __init__(self, D=128, device="cuda"):
         super(Encoder, self).__init__()
@@ -44,7 +43,7 @@ class Projector(nn.Module):
 
 
 class LinearProbe(nn.Module):
-    def __init__(self, encoder,input_dim, num_classes):
+    def __init__(self, encoder, input_dim, num_classes):
         super(LinearProbe, self).__init__()
         self.encoder = encoder
         for param in self.encoder.parameters():

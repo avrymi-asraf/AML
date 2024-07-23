@@ -68,7 +68,7 @@ def load_vicreg_cifar10(batch_size=256, num_workers=2, root="./data"):
         root=root, train=True, download=True, transform=transforms.ToTensor()
     )
     test_dataset = datasets.CIFAR10(
-        root=root, train=False, download=True,transform=transforms.ToTensor()
+        root=root, train=False, download=True, transform=transforms.ToTensor()
     )
 
     vicreg_train_dataset = VICRegDataset(train_dataset, train_transform)
