@@ -1,6 +1,8 @@
 import torch
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, Dataset, Subset
+import plotly.express as px
+
 
 train_transform = transforms.Compose(
     [
@@ -66,10 +68,11 @@ def load_vicreg_cifar10(batch_size=256, num_workers=2, root="./data"):
         root=root, train=True, download=True, transform=transforms.ToTensor()
     )
     test_dataset = datasets.CIFAR10(
-        root=root, train=False, download=True, transform=test_transform
+        root=root, train=False, download=True,transform=transforms.ToTensor()
     )
 
     vicreg_train_dataset = VICRegDataset(train_dataset, train_transform)
+    vicreg_test_dataset = VICRegDataset(train_dataset, train_transform)
 
     train_loader = DataLoader(
         vicreg_train_dataset,
@@ -79,7 +82,7 @@ def load_vicreg_cifar10(batch_size=256, num_workers=2, root="./data"):
         pin_memory=True,
     )
     test_loader = DataLoader(
-        test_dataset,
+        vicreg_test_dataset,
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
@@ -224,33 +227,37 @@ def load_combined_test_set(batch_size=256, num_workers=2, root="./data"):
 
 def test():
     # Test the loaders
-    cifar_train, cifar_test = load_cifar10()
-    mnist_train, mnist_test = load_mnist()
-    combined_test = load_combined_test_set()
+    # cifar_train, cifar_test = load_cifar10()
+    # mnist_train, mnist_test = load_mnist()
+    # combined_test = load_combined_test_set()
     vicreg_train, _ = load_vicreg_cifar10()
 
-    print(
-        f"CIFAR10 - Train: {len(cifar_train.dataset)}, Test: {len(cifar_test.dataset)}"
-    )
-    print(f"MNIST - Train: {len(mnist_train.dataset)}, Test: {len(mnist_test.dataset)}")
-    print(f"Combined Test Set: {len(combined_test.dataset)}")
-    print(f"VICReg CIFAR10 - Train: {len(vicreg_train.dataset)}")
+    # print(
+    #     f"CIFAR10 - Train: {len(cifar_train.dataset)}, Test: {len(cifar_test.dataset)}"
+    # )
+    # print(f"MNIST - Train: {len(mnist_train.dataset)}, Test: {len(mnist_test.dataset)}")
+    # print(f"Combined Test Set: {len(combined_test.dataset)}")
+    # print(f"VICReg CIFAR10 - Train: {len(vicreg_train.dataset)}")
 
     # Verify data shapes
-    for images, labels in cifar_train:
-        print(f"CIFAR10 batch shape: {images.shape}")
-        break
+    # for images, labels in cifar_train:
+    #     print(f"CIFAR10 batch shape: {images.shape}")
+    #     break
 
-    for images, labels in mnist_train:
-        print(f"MNIST batch shape: {images.shape}")
-        break
+    # for images, labels in mnist_train:
+    #     print(f"MNIST batch shape: {images.shape}")
+    #     break
 
-    for images, labels in combined_test:
-        print(f"Combined test batch shape: {images.shape}")
-        print(f"Combined test labels: {labels.unique()}")
-        break
+    # for images, labels in combined_test:
+    #     print(f"Combined test batch shape: {images.shape}")
+    #     print(f"Combined test labels: {labels.unique()}")
+    #     break
 
     for z, z_prime in vicreg_train:
-        print(f"VICReg z batch shape: {z.shape}")
-        print(f"VICReg z' batch shape: {z_prime.shape}")
+        px.imshow(z[0].permute(1, 2, 0).cpu().numpy()).show()
+        px.imshow(z_prime[0].permute(1, 2, 0).cpu().numpy()).show()
         break
+
+
+if __name__ == "__main__":
+    test()
