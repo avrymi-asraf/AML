@@ -94,9 +94,9 @@ def load_cifar10(batch_size=256, num_workers=2, root="./data"):
     Load CIFAR10 dataset with custom transforms.
 
     Args:
-    - batch_size (int): 
+    - batch_size (int):
     - num_workers (int):
-    - root (str): 
+    - root (str):
 
     Returns:
     - train_loader, test_loader: DataLoader objects for training and testing
