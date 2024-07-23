@@ -165,8 +165,8 @@ def train_linear_probe(
 
             recorder.loc[epoch] = {
                 "epoch": epoch,
-                "epoch_loss": epoch_loss / len(train_loader),
-                "test_loss": test_loss / len(test_loader),
+                "epoch_loss": epoch_loss / len(train_loader.dataset),
+                "test_loss": test_loss / len(test_loader.dataset),
                 "accuracy": correct / len(test_loader.dataset),
             }
 
