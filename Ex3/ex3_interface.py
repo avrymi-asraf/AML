@@ -14,6 +14,8 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.nn.functional import pad
 
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 
 import pandas as pd
 import numpy as np
@@ -107,8 +109,8 @@ for epoch in range(epochs):
     model.eval()
     with torch.no_grad():
         inv_loss, var_loss, cov_loss, test_loss = 0, 0, 0, 0
-        for i, (x1,_) in enumerate(test_loader):
-            x1, x2 = x1.to(DEVICE), x1.clone().to(DEVICE)
+        for i, (x1,x2) in enumerate(test_loader):
+            x1, x2 = x1.to(DEVICE), x2.to(DEVICE)
             z1, z2 = model(x1), model(x2)
             _, loss_components = loss_function_d(z1, z2)
             inv_loss += loss_components["inv_loss"]
@@ -116,7 +118,6 @@ for epoch in range(epochs):
             cov_loss += loss_components["cov_loss"]
             test_loss += loss_components["loss"]
 
-        loss, compomment = loss_function_d(z1, z2)
         recorder.loc[epoch] = {
             "epoch": epoch,
             "epoch_loss": epoch_loss,
@@ -131,11 +132,69 @@ for epoch in range(epochs):
             y=["epoch_loss", "inv_loss", "var_loss", "cov_loss", "test_loss"],
         ).show()
 
+torch.save(model.state_dict(), "vicreg_20_run.txt")
+
 """# Q2: PCA vs. T-SNE Visualizations.
 Compute the representations of each test image using your trained encoder.
 Map (using the sklearn library) the representation to a 2D space using: (i) PCA (ii) T-SNE. Plot the T-SNE and the PCA 2D representations, colored by their classes. Look at both visualizations (PCA vs. T-SNE), which one seems more effective for visualizations to you? Look at the T-SNE visualization. Did VICReg managed to capture the class information accurately? Which classes seem entangled to you? Explain.
 
-# Q3: Linear Probing.
+"""
+
+model.eval()
+
+# Get the test data representations
+test_representations = []
+test_labels = []
+with torch.no_grad():
+    for images, labels in test_loader:
+        images = images.to(DEVICE)
+        representations = model.encoder(images)
+        test_representations.append(representations.cpu().numpy())
+        test_labels.append(labels.cpu().numpy())
+
+test_representations = np.concatenate(test_representations)
+test_labels = np.concatenate(test_labels)
+
+# Perform PCA
+pca = PCA(n_components=2)
+pca_representations = pca.fit_transform(test_representations)
+
+# Perform t-SNE
+tsne = TSNE(n_components=2, perplexity=30)
+tsne_representations = tsne.fit_transform(test_representations)
+
+# Create a DataFrame for Plotly
+pca_df = pd.DataFrame(
+    {
+        'PCA Component 1': pca_representations[:, 0],
+        'PCA Component 2': pca_representations[:, 1],
+        'Class': test_labels
+    }
+)
+
+tsne_df = pd.DataFrame(
+    {
+        't-SNE Component 1': tsne_representations[:, 0],
+        't-SNE Component 2': tsne_representations[:, 1],
+        'Class': test_labels
+    }
+)
+
+# Plot PCA results with Plotly
+fig_pca = px.scatter(
+    pca_df, x='PCA Component 1', y='PCA Component 2',
+    color='Class', title='PCA Visualization of Test Image Representations'
+)
+fig_pca.show()
+
+# Plot t-SNE results with Plotly
+fig_tsne = px.scatter(
+    tsne_df, x='t-SNE Component 1', y='t-SNE Component 2',
+    color='Class', title='t-SNE Visualization of Test Image Representations'
+)
+fig_tsne.show()
+
+"""# Q3: Linear Probing.
 Perform a linear probing (single FC layer) to the encoder’s representation. Train this
 classifier on the representations of the CIFAR10 train set. Remember to freeze the encoder, i.e. do not update it. Compute the probing’s accuracy on the test set. What is the accuracy you reach with your classifier?
 Note: classifier accuracy should be at least 60% on the test set.
