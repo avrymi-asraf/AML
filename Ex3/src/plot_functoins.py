@@ -79,7 +79,6 @@ def visualize_linear_probe_predictions(
     plt.show()
 
 
-
 def visualize_representations(
     representations: np.ndarray,
     labels: np.ndarray,
@@ -154,3 +153,64 @@ def visualize_representations(
     fig_tsne.show()
 
 
+
+def visualize_retrieval_evaluation(samples, train_dataset, num_neighbors=5):
+    """
+    writed by chatgpt
+    Plot query images with their nearest and farthest neighbors for VICReg and Near Neighbor models.
+
+    Args:
+    samples (Dict[int, Dict[str, Any]]): 
+    train_dataset (Dataset): 
+    num_neighbors (int):  (default: 5)
+
+    Returns:
+    None: Displays the plot
+    """
+    num_classes = len(samples)
+    fig, axes = plt.subplots(
+        num_classes,
+        4 * num_neighbors + 3,
+        figsize=(4 * num_neighbors + 3, 3 * num_classes),
+    )
+    fig.suptitle(
+        "Retrieval Evaluation: Query Images with Nearest and Farthest Neighbors",
+        fontsize=16,
+    )
+
+    for idx, (cls, sample) in enumerate(samples.items()):
+        query_image = sample["image"][0]
+
+        # Plot query image
+        axes[idx, 0].imshow(query_image.permute(1, 2, 0))
+        axes[idx, 0].set_title(f"Query\n{sample['names']}")
+        axes[idx, 0].axis("off")
+
+        # Helper function to plot neighbors
+        def plot_neighbors(start_col, indices, title_prefix):
+            for j, neighbor_idx in enumerate(indices[0][:num_neighbors]):
+                neighbor_image, _ = train_dataset[neighbor_idx]
+                axes[idx, start_col + j].imshow(neighbor_image.permute(1, 2, 0))
+                axes[idx, start_col + j].set_title(f"{title_prefix} {j+1}")
+                axes[idx, start_col + j].axis("off")
+
+        # Plot VICReg nearest neighbors
+        plot_neighbors(1, sample["repr_vic_reg_near"], "VICReg\nNearest")
+
+        # Plot VICReg farthest neighbors
+        plot_neighbors(
+            num_neighbors + 2, sample["repr_vic_reg_far"], "VICReg\nFarthest"
+        )
+
+        # Plot Near Neighbor nearest neighbors
+        plot_neighbors(
+            2 * num_neighbors + 3, sample["repr_near_neig_near"], "NearNeig\nNearest"
+        )
+
+        # Plot Near Neighbor farthest neighbors
+        plot_neighbors(
+            3 * num_neighbors + 4, sample["repr_near_neig_far"], "NearNeig\nFarthest"
+        )
+
+    plt.tight_layout()
+    plt.show()
