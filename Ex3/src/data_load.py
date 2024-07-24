@@ -9,6 +9,8 @@ import faiss
 from typing import Callable, Optional, Tuple
 import random
 
+from Ex3.ex3_interface import DEVICE
+
 
 train_transform = transforms.Compose(
     [
@@ -94,6 +96,8 @@ def load_vicreg_cifar10(batch_size=256, num_workers=2, root="./data"):
         num_workers=num_workers,
         pin_memory=True,
     )
+
+    return train_loader, test_loader
 
     return train_loader, test_loader
 
@@ -232,7 +236,7 @@ def load_combined_test_set(batch_size=256, num_workers=2, root="./data"):
 
 
 def get_representations(
-    model: torch.nn.Module, data_loader: DataLoader, device: str = "cuda"
+    encoder: torch.nn.Module, data_loader: DataLoader, device: Optional[str] = None
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Extract representations and labels from a model using a given data loader.
@@ -245,14 +249,14 @@ def get_representations(
     Returns:
         Tuple[np.ndarray, np.ndarray]: Representations and corresponding labels.
     """
-    model.eval()
+    encoder.eval()
     representations = []
     labels = []
-
+    device = device or DEVICE
     with torch.no_grad():
         for images, batch_labels in data_loader:
             images = images.to(device)
-            batch_representations = model.encoder(images)
+            batch_representations = encoder(images)
             representations.append(batch_representations.cpu().numpy())
             labels.append(batch_labels.numpy())
 
@@ -261,7 +265,7 @@ def get_representations(
 
 def find_k_nearest_neighbors(
     representations: np.ndarray, k: int
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Find k nearest neighbors for each representation using FAISS, with optional GPU support.
 
@@ -294,16 +298,17 @@ def find_k_nearest_neighbors(
     distances, indices = index.search(representations, k + 1)  # +1 to exclude self
 
     # Remove self from results (first column)
-    return indices[:, 1:], distances[:, 1:]
+    return torch.tensor(indices[:, 1:]), torch.tensor(distances[:, 1:])
 
 
 class NearestNeighborDataset(Dataset):
+
     def __init__(
         self,
         original_dataset: Dataset,
         neighbor_indices: torch.Tensor,
         transform: Optional[Callable] = None,
-    ):
+    ) -> None:
         """
         Dataset that returns an image and one of its nearest neighbors.
 
@@ -348,6 +353,78 @@ class NearestNeighborDataset(Dataset):
         int: Number of samples in the dataset
         """
         return len(self.original_dataset)
+
+
+def load_nearest_neighbors_dataloader(
+    encoder,
+    k: int = 3,
+    batch_size=256,
+    num_workers=2,
+    root="./data",
+    batch_for_compute=int(2**10),
+):
+    """
+    Load a dataset of CIFAR10 images and their nearest neighbors.
+
+    Args:
+    - model: Trained model for feature extraction
+    - batch_size (int): Batch size for dataloaders
+    - num_workers (int): Number of workers for dataloaders
+    - root (str): Root directory for dataset storage
+
+    Returns:
+    - train_loader: DataLoader object for the nearest neighbor dataset
+    - original_dataset: Original CIFAR10 dataset
+    """
+    # Load CIFAR10 dataset
+    ds_train = datasets.CIFAR10(
+        root=root, train=True, download=True, transform=transforms.ToTensor()
+    )
+    ds_test = datasets.CIFAR10(
+        root=root, train=False, download=True, transform=transforms.ToTensor()
+    )
+    dl_train = DataLoader(
+        ds_train,
+        batch_size=batch_for_compute,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=True,
+    )
+    dl_test = DataLoader(
+        ds_test,
+        batch_size=batch_for_compute,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=True,
+    )
+
+    # Extract representations from the dataset
+    rep_test, _ = get_representations(encoder, dl_test)
+    rep_train, _ = get_representations(encoder, dl_train)
+
+    # Find k nearest neighbors
+    neighbor_indices_test, _ = find_k_nearest_neighbors(rep_test, k)
+    neighbor_indices_train, _ = find_k_nearest_neighbors(rep_train, k)
+
+    near_neig_ds_test = NearestNeighborDataset(ds_test, neighbor_indices_test)
+    near_neig_ds_train = NearestNeighborDataset(ds_train, neighbor_indices_train)
+
+    near_neig_dl_train = DataLoader(
+        near_neig_ds_train,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=True,
+    )
+    near_neig_dl_test = DataLoader(
+        near_neig_ds_test,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=True,
+    )
+
+    return near_neig_dl_train, near_neig_dl_test
 
 
 def test():
