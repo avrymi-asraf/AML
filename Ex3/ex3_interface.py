@@ -36,6 +36,7 @@ he_md = lambda x: display(Markdown(f'<div dir="rtl" lang="he" xml:lang="he">{x}<
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # @title Only for colab
+!pip install -q faiss-gpu
 !rm -rf /content/sample_data
 !rm -rf /content/src
 !mkdir src
@@ -48,19 +49,21 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 clear_output()
 
 # for local machine
-from src.models import Encoder, Projector, LinearProbe, VICeg
+from src.models import Encoder, Projector, LinearProbe, VICreg
 from src.vicreg_objectives import vicreg_loss_detailed, vicreg_loss_performance
 from src.data_load import (
     load_cifar10,
     load_mnist,
     load_combined_test_set,
     load_vicreg_cifar10,
+    get_representations,
+    find_k_nearest_neighbors,
+    load_nearest_neighbors_dataloader,
     test,
 )
 from src.train_functoin import train_vicreg,train_linear_probe
 from src.plot_functoins import (
     visualize_linear_probe_predictions,
-    get_representations,
     visualize_representations,
 )
 
@@ -69,7 +72,7 @@ Train VICReg on the CIFAR10 dataset. Plot the values of each of the 3 objectives
 figures) as a function of the training batches. In your figures also include the loss terms values on the test set,computed once every epoch.
 """
 
-model = VICeg().to(DEVICE)
+model = VICreg().to(DEVICE)
 batch_size = 256
 lr = 3 * 1e-3
 optimizer = torch.optim.Adam(
@@ -102,7 +105,7 @@ Map (using the sklearn library) the representation to a 2D space using: (i) PCA 
 
 batch_size = 256
 
-model = VICeg().to(DEVICE)
+model = VICreg().to(DEVICE)
 model.load_state_dict(torch.load("vicreg_20_run.pt", map_location=DEVICE))
 train_loader, test_loader = load_cifar10(batch_size=batch_size)
 
@@ -122,7 +125,7 @@ lr = 0.1
 epochs = 20
 train_loader, test_loader = load_cifar10(batch_size=batch_size)
 
-vic_reg_model = VICeg().to(DEVICE)
+vic_reg_model = VICreg().to(DEVICE)
 vic_reg_model.load_state_dict(torch.load("vicreg_20_run.pt", map_location=DEVICE))
 encoder = vic_reg_model.encoder
 model = LinearProbe(encoder, 128, 10).to(DEVICE)
@@ -137,7 +140,65 @@ recorder = train_linear_probe(
 Modify the optimized objective, by removing the variance objective term
 (µ = 0.). Using the representations from the modified encoder, perform the same PCA visualization from Q2, and the linear probing from Q3 (and include them in your report). Is the new accuracy better or worse? Can you see anything different in the representations visualization? Try to explain the difference in the accuracy using the visualizations.
 
-# Q5: Ablation 2 - No Generated Neighbors.
+### NoVar - Train Model
+"""
+
+model = VICreg().to(DEVICE)
+batch_size = 256
+lr = 3 * 1e-3
+optimizer = torch.optim.Adam(
+    model.parameters(), lr=lr, betas=(0.9, 0.999), weight_decay=10e-6
+)
+epochs = 30
+loss_function = lambda z1, z2: vicreg_loss_performance(z1, z2, lambda_var=0)
+loss_function_d = lambda z1, z2: vicreg_loss_detailed(z1, z2, lambda_var=0)
+
+train_loader, test_loader = load_vicreg_cifar10(batch_size=batch_size)
+
+recorder = train_vicreg(
+    model,
+    train_loader,
+    test_loader,
+    optimizer,
+    loss_function,
+    loss_function_d,
+    epochs,
+    DEVICE,
+)
+
+"""### NoVar - PCA, t-ENS visualisation"""
+
+batch_size = 256
+
+model = VICreg().to(DEVICE)
+model.load_state_dict(torch.load("vicreg_20_run.pt", map_location=DEVICE))
+train_loader, test_loader = load_cifar10(batch_size=batch_size)
+
+representations, labels = get_representations(model, test_loader, device=DEVICE)
+visualize_representations(representations, labels, "Test Image Representations")
+
+"""### NoVar - Linear probing"""
+
+# @title Hyperparameters Linear Probe
+
+batch_size = 256
+lr = 0.1
+epochs = 20
+train_loader, test_loader = load_cifar10(batch_size=batch_size)
+vic_reg_model = VICreg().to(DEVICE)
+vic_reg_model.load_state_dict(torch.load("vicreg_20_run.pt", map_location=DEVICE))
+encoder = vic_reg_model.encoder
+model = LinearProbe(encoder, 128, 10).to(DEVICE)
+optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+loss_function = nn.CrossEntropyLoss()
+recorder = train_linear_probe(
+    model, train_loader, test_loader, optimizer, loss_function, epochs, DEVICE
+)
+
+torch.save(model.state_dict(), "linear_probe_no_var_20_run.pt")
+recorder.to_csv("linear_probe_no_var_20_run.csv")
+
+"""# Q5: Ablation 2 - No Generated Neighbors.
 Now, we would like to ablate VICReg by only removing the generated neighbors, using neighbors from the data itself:
 First, compute the representations of your original VICReg, on all of the training set. In each step of training and for each image in the batch, use these representations to find the top 3 nearest neighbors, and randomly select 1 of them. Use the original image and this neighbor of it as your 2 views for the VICReg algorithm.
 
@@ -147,7 +208,77 @@ Compute the linear probing accuracy, and report it. Is the accuracy different fr
 - If no, explain why do you think this change had no effect (what compensates the things that are missing?).
 - If yes, explain what added value do you think the generated neighbors adds to the algorithm.
 
-# Q6: Ablation 3 - Laplacian Eigenmaps.
+### Training NearesNeighborsModel
+"""
+
+# @title Load VicReg encoder and nearest neighbors data loader
+
+
+batch_size = 256
+epochs = 30
+
+
+old_viceg = VICreg().to(DEVICE)
+old_viceg.load_state_dict(torch.load("vicreg_20_run.pt", map_location=DEVICE))
+encoder = old_viceg.encoder
+train_loader, test_loader = load_nearest_neighbors_dataloader(
+    encoder, batch_size=batch_size
+)
+
+# @title Hyperparameters Near Neig
+model = VICreg().to(DEVICE)
+lr = 3 * 1e-3
+optimizer = torch.optim.Adam(
+    model.parameters(), lr=lr, betas=(0.9, 0.999), weight_decay=10e-6
+)
+
+loss_function = lambda z1, z2: vicreg_loss_performance(z1, z2)
+loss_function_d = lambda z1, z2: vicreg_loss_detailed(z1, z2)
+
+# @title Train
+recorder = train_vicreg(
+    model,
+    train_loader,
+    test_loader,
+    optimizer,
+    loss_function,
+    loss_function_d,
+    epochs,
+    DEVICE,
+)
+torch.save(model.state_dict(), "vicreg_near_neig_30_run.pt")
+recorder.to_csv("vicreg_near_neig_30_run.csv")
+
+"""### NearNei - Linear probing"""
+
+# @title Hyperparameters Linear Probe
+
+batch_size = 256
+lr = 0.1
+epochs = 20
+train_loader, test_loader = load_cifar10(batch_size=batch_size)
+
+vic_reg_model = VICreg().to(DEVICE)
+vic_reg_model.load_state_dict(
+    torch.load("vicreg_near_neig_30_run.pt", map_location=DEVICE)
+)
+encoder = vic_reg_model.encoder
+
+model = LinearProbe(encoder, 128, 10).to(DEVICE)
+optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+loss_function = nn.CrossEntropyLoss()
+
+
+recorder = train_linear_probe(
+    model, train_loader, test_loader, optimizer, loss_function, epochs, DEVICE
+)
+
+torch.save(model.state_dict(), "linear_probe_near_neig_20_run.pt")
+recorder.to_csv("linear_probe_near_neig_20_run.csv")
+
+visualize_linear_probe_predictions(model,DEVICE)
+
+"""# Q6: Ablation 3 - Laplacian Eigenmaps.
 After removing the generated neighbors, we would like to remove both it and the amortization at once. To do so, we will perform Laplacian Eigenmaps representation learning on the training data of CIFAR10. Since this algorithm is difficult to run, we ran it for you on 10K images (due to runtime limitations) and give you the T-SNE plotting of these representations in Fig. 2 3.
 Compare this to VICReg’s T-SNE plot from Q2. Based on this visual and linear probing comparison, which method (VICReg vs. Laplacian Eigenmaps) seems more effective for downstream object classification?
 Explain your answer in detail, including what do you think makes one algorithm to be more successful.
