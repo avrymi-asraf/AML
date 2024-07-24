@@ -9,6 +9,8 @@ import faiss
 from typing import Callable, Optional, Tuple
 import random
 
+from tqdm import tqdm
+
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
@@ -254,7 +256,7 @@ def get_representations(
     labels = []
     device = device or DEVICE
     with torch.no_grad():
-        for images, batch_labels in data_loader:
+        for images, batch_labels in tqdm(data_loader, desc="Extracting representations"):
             images = images.to(device)
             batch_representations = encoder(images)
             representations.append(batch_representations.cpu().numpy())
@@ -288,13 +290,16 @@ def find_k_nearest_neighbors(
     if torch.cuda.is_available():
         res = faiss.StandardGpuResources()
         index = faiss.GpuIndexFlatL2(res, n_features)
+        print("Using GPU for nearest neighbor search.")
     else:
         index = faiss.IndexFlatL2(n_features)
+        print("Using CPU for nearest neighbor search.")
 
     # Add vectors to the index
     index.add(representations)
 
     # Search for k nearest neighbors
+    print("Searching for nearest neighbors...")
     distances, indices = index.search(representations, k + 1)  # +1 to exclude self
 
     # Remove self from results (first column)
