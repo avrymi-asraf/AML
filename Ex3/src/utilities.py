@@ -187,10 +187,10 @@ def retrieval_evaluation(
 
     # Get representations for all training images
     repr_vic_reg, _ = get_representations(
-        vic_reg_encoder.encoder, train_dataset, device=device
+        vic_reg_encoder, train_dataset, device=device
     )
     repr_near_neig, _ = get_representations(
-        near_neig_encoder.encoder, train_dataset, device=device
+        near_neig_encoder, train_dataset, device=device
     )
 
     repr_vic_reg = torch.tensor(repr_vic_reg)
