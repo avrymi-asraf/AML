@@ -11,8 +11,8 @@ Original file is located at
 
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
-from torch.nn.functional import pad
+import torchvision
+
 
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
@@ -35,36 +35,35 @@ he_md = lambda x: display(Markdown(f'<div dir="rtl" lang="he" xml:lang="he">{x}<
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# @title Only for colab
-!pip install -q faiss-gpu
-!rm -rf /content/sample_data
-!rm -rf /content/src
-!mkdir src
+# # @title Only for colab
+#!pip install -q faiss-gpu
+# !rm -rf /content/sample_data
+# !rm -rf /content/src
+# !mkdir src
 
-!wget -O /content/src/data_load.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/data_load.py
-!wget -O /content/src/models.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/models.py
-!wget -O /content/src/vicreg_objectives.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/vicreg_objectives.py
-!wget -O /content/src/train_functoin.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/train_functoin.py
-!wget -O /content/src/plot_functoins.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/plot_functoins.py
-clear_output()
+# !wget -O /content/src/data_load.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/data_load.py
+# !wget -O /content/src/models.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/models.py
+# !wget -O /content/src/vicreg_objectives.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/vicreg_objectives.py
+# !wget -O /content/src/train_functoin.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/train_functoin.py
+# !wget -O /content/src/plot_functoins.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/plot_functoins.py
+# !wget -O /content/src/utilities.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/utilities.py
+# clear_output()
 
 # for local machine
 from src.models import Encoder, Projector, LinearProbe, VICreg
 from src.vicreg_objectives import vicreg_loss_detailed, vicreg_loss_performance
 from src.data_load import (
     load_cifar10,
-    load_mnist,
-    load_combined_test_set,
     load_vicreg_cifar10,
-    get_representations,
-    find_k_nearest_neighbors,
     load_nearest_neighbors_dataloader,
-    test,
+    load_dataset_cifar10,
 )
+from src.utilities import get_representations, retrieval_evaluation
 from src.train_functoin import train_vicreg,train_linear_probe
 from src.plot_functoins import (
     visualize_linear_probe_predictions,
     visualize_representations,
+    visualize_retrieval_evaluation,
 )
 
 """# Q1: Training
@@ -82,12 +81,12 @@ epochs = 2
 loss_function = lambda z1, z2: vicreg_loss_performance(z1, z2)
 loss_function_d = lambda z1, z2: vicreg_loss_detailed(z1, z2)
 
-train_loader, test_loader = load_vicreg_cifar10(batch_size=batch_size)
+test_dataset, test_dataset = load_vicreg_cifar10(batch_size=batch_size)
 
 recorder = train_vicreg(
     model,
-    train_loader,
-    test_loader,
+    test_dataset,
+    test_dataset,
     optimizer,
     loss_function,
     loss_function_d,
@@ -107,9 +106,9 @@ batch_size = 256
 
 model = VICreg().to(DEVICE)
 model.load_state_dict(torch.load("vicreg_20_run.pt", map_location=DEVICE))
-train_loader, test_loader = load_cifar10(batch_size=batch_size)
+test_dataset, test_dataset = load_cifar10(batch_size=batch_size)
 
-representations, labels = get_representations(model, test_loader, device=DEVICE)
+representations, labels = get_representations(model, test_dataset, device=DEVICE)
 visualize_representations(representations, labels, "Test Image Representations")
 
 """# Q3: Linear Probing.
@@ -123,17 +122,17 @@ Note: classifier accuracy should be at least 60% on the test set.
 batch_size = 256
 lr = 0.1
 epochs = 20
-train_loader, test_loader = load_cifar10(batch_size=batch_size)
+test_dataset, test_dataset = load_cifar10(batch_size=batch_size)
 
-vic_reg_model = VICreg().to(DEVICE)
-vic_reg_model.load_state_dict(torch.load("vicreg_20_run.pt", map_location=DEVICE))
-encoder = vic_reg_model.encoder
+vicreg_model = VICreg().to(DEVICE)
+vicreg_model.load_state_dict(torch.load("vicreg_20_run.pt", map_location=DEVICE))
+encoder = vicreg_model.encoder
 model = LinearProbe(encoder, 128, 10).to(DEVICE)
 optimizer = torch.optim.SGD(model.parameters(), lr=lr)
 loss_function = nn.CrossEntropyLoss()
 
 recorder = train_linear_probe(
-    model, train_loader, test_loader, optimizer, loss_function, epochs, DEVICE
+    model, test_dataset, test_dataset, optimizer, loss_function, epochs, DEVICE
 )
 
 """# Q4: Ablation 1 - No Variance Term.
@@ -153,12 +152,12 @@ epochs = 30
 loss_function = lambda z1, z2: vicreg_loss_performance(z1, z2, lambda_var=0)
 loss_function_d = lambda z1, z2: vicreg_loss_detailed(z1, z2, lambda_var=0)
 
-train_loader, test_loader = load_vicreg_cifar10(batch_size=batch_size)
+test_dataset, test_dataset = load_vicreg_cifar10(batch_size=batch_size)
 
 recorder = train_vicreg(
     model,
-    train_loader,
-    test_loader,
+    test_dataset,
+    test_dataset,
     optimizer,
     loss_function,
     loss_function_d,
@@ -172,9 +171,9 @@ batch_size = 256
 
 model = VICreg().to(DEVICE)
 model.load_state_dict(torch.load("vicreg_20_run.pt", map_location=DEVICE))
-train_loader, test_loader = load_cifar10(batch_size=batch_size)
+test_dataset, test_dataset = load_cifar10(batch_size=batch_size)
 
-representations, labels = get_representations(model, test_loader, device=DEVICE)
+representations, labels = get_representations(model, test_dataset, device=DEVICE)
 visualize_representations(representations, labels, "Test Image Representations")
 
 """### NoVar - Linear probing"""
@@ -184,15 +183,15 @@ visualize_representations(representations, labels, "Test Image Representations")
 batch_size = 256
 lr = 0.1
 epochs = 20
-train_loader, test_loader = load_cifar10(batch_size=batch_size)
-vic_reg_model = VICreg().to(DEVICE)
-vic_reg_model.load_state_dict(torch.load("vicreg_20_run.pt", map_location=DEVICE))
-encoder = vic_reg_model.encoder
+test_dataset, test_dataset = load_cifar10(batch_size=batch_size)
+vicreg_model = VICreg().to(DEVICE)
+vicreg_model.load_state_dict(torch.load("vicreg_20_run.pt", map_location=DEVICE))
+encoder = vicreg_model.encoder
 model = LinearProbe(encoder, 128, 10).to(DEVICE)
 optimizer = torch.optim.SGD(model.parameters(), lr=lr)
 loss_function = nn.CrossEntropyLoss()
 recorder = train_linear_probe(
-    model, train_loader, test_loader, optimizer, loss_function, epochs, DEVICE
+    model, test_dataset, test_dataset, optimizer, loss_function, epochs, DEVICE
 )
 
 torch.save(model.state_dict(), "linear_probe_no_var_20_run.pt")
@@ -219,9 +218,9 @@ epochs = 30
 
 
 old_viceg = VICreg().to(DEVICE)
-old_viceg.load_state_dict(torch.load("vicreg_20_run.pt", map_location=DEVICE))
+old_viceg.load_state_dict(torch.load("vicreg_30_run.pt", map_location=DEVICE))
 encoder = old_viceg.encoder
-train_loader, test_loader = load_nearest_neighbors_dataloader(
+test_dataset, test_dataset = load_nearest_neighbors_dataloader(
     encoder, batch_size=batch_size
 )
 
@@ -238,8 +237,8 @@ loss_function_d = lambda z1, z2: vicreg_loss_detailed(z1, z2)
 # @title Train
 recorder = train_vicreg(
     model,
-    train_loader,
-    test_loader,
+    test_dataset,
+    test_dataset,
     optimizer,
     loss_function,
     loss_function_d,
@@ -256,13 +255,13 @@ recorder.to_csv("vicreg_near_neig_30_run.csv")
 batch_size = 256
 lr = 0.1
 epochs = 20
-train_loader, test_loader = load_cifar10(batch_size=batch_size)
+test_dataset, test_dataset = load_cifar10(batch_size=batch_size)
 
-vic_reg_model = VICreg().to(DEVICE)
-vic_reg_model.load_state_dict(
+vicreg_model = VICreg().to(DEVICE)
+vicreg_model.load_state_dict(
     torch.load("vicreg_near_neig_30_run.pt", map_location=DEVICE)
 )
-encoder = vic_reg_model.encoder
+encoder = vicreg_model.encoder
 
 model = LinearProbe(encoder, 128, 10).to(DEVICE)
 optimizer = torch.optim.SGD(model.parameters(), lr=lr)
@@ -270,13 +269,11 @@ loss_function = nn.CrossEntropyLoss()
 
 
 recorder = train_linear_probe(
-    model, train_loader, test_loader, optimizer, loss_function, epochs, DEVICE
+    model, test_dataset, test_dataset, optimizer, loss_function, epochs, DEVICE
 )
 
 torch.save(model.state_dict(), "linear_probe_near_neig_20_run.pt")
 recorder.to_csv("linear_probe_near_neig_20_run.csv")
-
-visualize_linear_probe_predictions(model,DEVICE)
 
 """# Q6: Ablation 3 - Laplacian Eigenmaps.
 After removing the generated neighbors, we would like to remove both it and the amortization at once. To do so, we will perform Laplacian Eigenmaps representation learning on the training data of CIFAR10. Since this algorithm is difficult to run, we ran it for you on 10K images (due to runtime limitations) and give you the T-SNE plotting of these representations in Fig. 2 3.
@@ -297,8 +294,33 @@ Using this visualization, explain what attributes each method attends to. What a
 the different methods? Which one excels at keeping close images together? Which one excels at keeping distant
 images far apart? Explain the differences between the methods in detail, as seen by this visualization. You may
 select more than 1 image for a specific class if you wish to get a better understanding (Although it is not mandatory).
+"""
 
-# Q1 - Anomaly Detection.
+test_dataset, test_dataset = load_dataset_cifar10()
+
+test_dataset.data[[0,1,2]].shape
+
+# @title Load VicReg encoder and NearNeig encoder
+
+
+vicreg_model = VICreg().to(DEVICE)
+vicreg_model.load_state_dict(torch.load("vicreg_30_run.pt", map_location=DEVICE))
+vic_reg_encoder = vicreg_model.encoder
+
+near_neig_model = VICreg().to(DEVICE)
+near_neig_model.load_state_dict(
+    torch.load("vicreg_near_neig_30_run.pt", map_location=DEVICE)
+)
+near_neig_encoder = near_neig_model.encoder
+
+train_dataset, test_dataset = load_dataset_cifar10()
+
+sampels = retrieval_evaluation(
+    vic_reg_encoder, near_neig_encoder, train_dataset, test_dataset, DEVICE
+)
+visualize_retrieval_evaluation(sampels,train_dataset)
+
+"""# Q1 - Anomaly Detection.
 Using the CIFAR10 training data as reference for normal data, compute the kNN
 density estimation for all the (CIFAR10 + MNIST) test set representations. Do this for both (i) VICReg (ii) VICReg
 without generated neighbors. Use k = 2.

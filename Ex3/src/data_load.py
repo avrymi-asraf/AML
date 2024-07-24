@@ -12,7 +12,7 @@ import random
 from tqdm import tqdm
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-from utilities import get_representations, find_k_nearest_neighbors
+from src.utilities import get_representations, find_k_nearest_neighbors
 
 train_transform = transforms.Compose(
     [

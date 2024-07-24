@@ -14,7 +14,7 @@ from tqdm import tqdm
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-from data_load import *
+from src.data_load import *
 
 
 def get_representations(
