@@ -79,33 +79,6 @@ def visualize_linear_probe_predictions(
     plt.show()
 
 
-def get_representations(
-    model: torch.nn.Module, data_loader: DataLoader, device: str = "cuda"
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Extract representations and labels from a model using a given data loader.
-
-    Args:
-        model (torch.nn.Module): The model to extract representations from.
-        data_loader (DataLoader): DataLoader containing the dataset.
-        device (str): Device to run the model on ('cuda' or 'cpu').
-
-    Returns:
-        Tuple[np.ndarray, np.ndarray]: Representations and corresponding labels.
-    """
-    model.eval()
-    representations = []
-    labels = []
-
-    with torch.no_grad():
-        for images, batch_labels in data_loader:
-            images = images.to(device)
-            batch_representations = model.encoder(images)
-            representations.append(batch_representations.cpu().numpy())
-            labels.append(batch_labels.numpy())
-
-    return np.concatenate(representations), np.concatenate(labels)
-
 
 def visualize_representations(
     representations: np.ndarray,

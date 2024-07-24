@@ -35,16 +35,20 @@ he_md = lambda x: display(Markdown(f'<div dir="rtl" lang="he" xml:lang="he">{x}<
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# for colab
+# @title Only for colab
+!rm -rf /content/sample_data
+!rm -rf /content/src
 !mkdir src
 
 !wget -O /content/src/data_load.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/data_load.py
 !wget -O /content/src/models.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/models.py
 !wget -O /content/src/vicreg_objectives.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/vicreg_objectives.py
+!wget -O /content/src/train_functoin.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/train_functoin.py
+!wget -O /content/src/plot_functoins.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/plot_functoins.py
 clear_output()
 
 # for local machine
-from src.models import Encoder, Projector
+from src.models import Encoder, Projector, LinearProbe, VICeg
 from src.vicreg_objectives import vicreg_loss_detailed, vicreg_loss_performance
 from src.data_load import (
     load_cifar10,
@@ -53,86 +57,42 @@ from src.data_load import (
     load_vicreg_cifar10,
     test,
 )
+from src.train_functoin import train_vicreg,train_linear_probe
+from src.plot_functoins import (
+    visualize_linear_probe_predictions,
+    get_representations,
+    visualize_representations,
+)
 
 """# Q1: Training
 Train VICReg on the CIFAR10 dataset. Plot the values of each of the 3 objectives (in separate
 figures) as a function of the training batches. In your figures also include the loss terms values on the test set,computed once every epoch.
 """
 
-class VICeg(nn.Module):
-    def __init__(self, en_dim=128, prj_dim=512):
-        super(VICeg, self).__init__()
-        self.encoder = Encoder(D=en_dim, device=DEVICE)
-        self.projector = Projector(D=en_dim, proj_dim=prj_dim)
-
-    def forward(self, x):
-        return self.projector(self.encoder(x))
-
 model = VICeg().to(DEVICE)
-
-
 batch_size = 256
 lr = 3 * 1e-3
 optimizer = torch.optim.Adam(
     model.parameters(), lr=lr, betas=(0.9, 0.999), weight_decay=10e-6
 )
-epochs = 20
+epochs = 2
 loss_function = lambda z1, z2: vicreg_loss_performance(z1, z2)
 loss_function_d = lambda z1, z2: vicreg_loss_detailed(z1, z2)
 
-recorder = pd.DataFrame(
-    columns=[
-        "epoch",
-        "epoch_loss",
-        "inv_loss",
-        "var_loss",
-        "cov_loss",
-        "test_loss",
-    ],
-    index=range(epochs),
-)
-
 train_loader, test_loader = load_vicreg_cifar10(batch_size=batch_size)
 
-for epoch in range(epochs):
-    model.train()
-    epoch_loss = 1
-    for i, (x1, x2) in tqdm(enumerate(train_loader)):
-        x1, x2 = x1.to(DEVICE), x2.to(DEVICE)
-        optimizer.zero_grad()
-        z1, z2 = model(x1), model(x2)
-        loss = loss_function(z1, z2)
-        loss.backward()
-        epoch_loss = loss.item() * 0.3 + epoch_loss * 0.7
-        optimizer.step()
+recorder = train_vicreg(
+    model,
+    train_loader,
+    test_loader,
+    optimizer,
+    loss_function,
+    loss_function_d,
+    epochs,
+    DEVICE,
+)
 
-    model.eval()
-    with torch.no_grad():
-        inv_loss, var_loss, cov_loss, test_loss = 0, 0, 0, 0
-        for i, (x1,x2) in enumerate(test_loader):
-            x1, x2 = x1.to(DEVICE), x2.to(DEVICE)
-            z1, z2 = model(x1), model(x2)
-            _, loss_components = loss_function_d(z1, z2)
-            inv_loss += loss_components["inv_loss"]
-            var_loss += loss_components["var_loss"]
-            cov_loss += loss_components["cov_loss"]
-            test_loss += loss_components["loss"]
-
-        recorder.loc[epoch] = {
-            "epoch": epoch,
-            "epoch_loss": epoch_loss,
-            "inv_loss": inv_loss,
-            "var_loss": var_loss,
-            "cov_loss": cov_loss,
-            "test_loss": test_loss,
-        }
-        clear_output(wait=True)
-        px.line(
-            recorder,
-            y=["epoch_loss", "inv_loss", "var_loss", "cov_loss", "test_loss"],
-        ).show()
-
-torch.save(model.state_dict(), "vicreg_20_run.txt")
+torch.save(model.state_dict(), "vicreg_20_run.pt")
 
 """# Q2: PCA vs. T-SNE Visualizations.
 Compute the representations of each test image using your trained encoder.
@@ -140,66 +100,40 @@ Map (using the sklearn library) the representation to a 2D space using: (i) PCA 
 
 """
 
-model.eval()
+batch_size = 256
 
-# Get the test data representations
-test_representations = []
-test_labels = []
-with torch.no_grad():
-    for images, labels in test_loader:
-        images = images.to(DEVICE)
-        representations = model.encoder(images)
-        test_representations.append(representations.cpu().numpy())
-        test_labels.append(labels.cpu().numpy())
+model = VICeg().to(DEVICE)
+model.load_state_dict(torch.load("vicreg_20_run.pt", map_location=DEVICE))
+train_loader, test_loader = load_cifar10(batch_size=batch_size)
 
-test_representations = np.concatenate(test_representations)
-test_labels = np.concatenate(test_labels)
-
-# Perform PCA
-pca = PCA(n_components=2)
-pca_representations = pca.fit_transform(test_representations)
-
-# Perform t-SNE
-tsne = TSNE(n_components=2, perplexity=30)
-tsne_representations = tsne.fit_transform(test_representations)
-
-# Create a DataFrame for Plotly
-pca_df = pd.DataFrame(
-    {
-        'PCA Component 1': pca_representations[:, 0],
-        'PCA Component 2': pca_representations[:, 1],
-        'Class': test_labels
-    }
-)
-
-tsne_df = pd.DataFrame(
-    {
-        't-SNE Component 1': tsne_representations[:, 0],
-        't-SNE Component 2': tsne_representations[:, 1],
-        'Class': test_labels
-    }
-)
-
-# Plot PCA results with Plotly
-fig_pca = px.scatter(
-    pca_df, x='PCA Component 1', y='PCA Component 2',
-    color='Class', title='PCA Visualization of Test Image Representations'
-)
-fig_pca.show()
-
-# Plot t-SNE results with Plotly
-fig_tsne = px.scatter(
-    tsne_df, x='t-SNE Component 1', y='t-SNE Component 2',
-    color='Class', title='t-SNE Visualization of Test Image Representations'
-)
-fig_tsne.show()
+representations, labels = get_representations(model, test_loader, device=DEVICE)
+visualize_representations(representations, labels, "Test Image Representations")
 
 """# Q3: Linear Probing.
 Perform a linear probing (single FC layer) to the encoder’s representation. Train this
 classifier on the representations of the CIFAR10 train set. Remember to freeze the encoder, i.e. do not update it. Compute the probing’s accuracy on the test set. What is the accuracy you reach with your classifier?
 Note: classifier accuracy should be at least 60% on the test set.
+"""
 
-# Q4: Ablation 1 - No Variance Term.
+# @title Hyperparameters Linear Probe
+
+batch_size = 256
+lr = 0.1
+epochs = 20
+train_loader, test_loader = load_cifar10(batch_size=batch_size)
+
+vic_reg_model = VICeg().to(DEVICE)
+vic_reg_model.load_state_dict(torch.load("vicreg_20_run.pt", map_location=DEVICE))
+encoder = vic_reg_model.encoder
+model = LinearProbe(encoder, 128, 10).to(DEVICE)
+optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+loss_function = nn.CrossEntropyLoss()
+
+recorder = train_linear_probe(
+    model, train_loader, test_loader, optimizer, loss_function, epochs, DEVICE
+)
+
+"""# Q4: Ablation 1 - No Variance Term.
 Modify the optimized objective, by removing the variance objective term
 (µ = 0.). Using the representations from the modified encoder, perform the same PCA visualization from Q2, and the linear probing from Q3 (and include them in your report). Is the new accuracy better or worse? Can you see anything different in the representations visualization? Try to explain the difference in the accuracy using the visualizations.
 

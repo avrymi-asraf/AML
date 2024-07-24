@@ -1,7 +1,13 @@
+from typing import Tuple
+import numpy as np
 import torch
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, Dataset, Subset
 import plotly.express as px
+from sklearn.neighbors import NearestNeighbors
+import faiss
+from typing import Callable, Optional, Tuple
+import random
 
 
 train_transform = transforms.Compose(
@@ -223,6 +229,125 @@ def load_combined_test_set(batch_size=256, num_workers=2, root="./data"):
     )
 
     return combined_loader
+
+
+def get_representations(
+    model: torch.nn.Module, data_loader: DataLoader, device: str = "cuda"
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Extract representations and labels from a model using a given data loader.
+
+    Args:
+        model (torch.nn.Module): The model to extract representations from.
+        data_loader (DataLoader): DataLoader containing the dataset.
+        device (str): Device to run the model on ('cuda' or 'cpu').
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray]: Representations and corresponding labels.
+    """
+    model.eval()
+    representations = []
+    labels = []
+
+    with torch.no_grad():
+        for images, batch_labels in data_loader:
+            images = images.to(device)
+            batch_representations = model.encoder(images)
+            representations.append(batch_representations.cpu().numpy())
+            labels.append(batch_labels.numpy())
+
+    return np.concatenate(representations), np.concatenate(labels)
+
+
+def find_k_nearest_neighbors(
+    representations: np.ndarray, k: int
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Find k nearest neighbors for each representation using FAISS, with optional GPU support.
+
+    Args:
+        representations (np.ndarray): 2D array of representations, shape (n_samples, n_features)
+        k (int):
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray]:
+            - indices: 2D array of indices of k nearest neighbors, shape (n_samples, k)
+            - distances: 2D array of distances to k nearest neighbors, shape (n_samples, k)
+    """
+    n_samples, n_features = representations.shape
+
+    # Convert to correct data type
+    representations = representations.astype(np.float32)
+
+    # Create the index
+    # Check if CUDA is available
+    if torch.cuda.is_available():
+        res = faiss.StandardGpuResources()
+        index = faiss.GpuIndexFlatL2(res, n_features)
+    else:
+        index = faiss.IndexFlatL2(n_features)
+
+    # Add vectors to the index
+    index.add(representations)
+
+    # Search for k nearest neighbors
+    distances, indices = index.search(representations, k + 1)  # +1 to exclude self
+
+    # Remove self from results (first column)
+    return indices[:, 1:], distances[:, 1:]
+
+
+class NearestNeighborDataset(Dataset):
+    def __init__(
+        self,
+        original_dataset: Dataset,
+        neighbor_indices: torch.Tensor,
+        transform: Optional[Callable] = None,
+    ):
+        """
+        Dataset that returns an image and one of its nearest neighbors.
+
+        Args:
+        original_dataset (Dataset): Original CIFAR10 dataset
+        neighbor_indices (torch.Tensor): Precomputed nearest neighbor indices
+        transform (Optional[Callable]): Transforms to apply to the images
+        """
+        self.original_dataset = original_dataset
+        self.neighbor_indices = neighbor_indices
+        self.transform = transform
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Returns the original image and one of its nearest neighbors.
+
+        Args:
+        index (int): Index of the sample
+
+        Returns:
+        Tuple[torch.Tensor, torch.Tensor]: Original image and one of its nearest neighbors
+        """
+        # Get the original image
+        original_image, _ = self.original_dataset[index]
+
+        # Randomly select one of the nearest neighbors
+        neighbor_index = random.choice(self.neighbor_indices[index].tolist())
+        neighbor_image, _ = self.original_dataset[neighbor_index]
+
+        # Apply transforms if any
+        if self.transform:
+            original_image = self.transform(original_image)
+            neighbor_image = self.transform(neighbor_image)
+
+        return original_image, neighbor_image
+
+    def __len__(self) -> int:
+        """
+        Returns the number of samples in the dataset.
+
+        Returns:
+        int: Number of samples in the dataset
+        """
+        return len(self.original_dataset)
 
 
 def test():
