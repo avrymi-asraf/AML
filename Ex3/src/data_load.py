@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Dict, List, Tuple
 import numpy as np
 import torch
 from torchvision import datasets, transforms
@@ -12,7 +12,7 @@ import random
 from tqdm import tqdm
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
+from utilities import get_representations, find_k_nearest_neighbors
 
 train_transform = transforms.Compose(
     [
@@ -101,7 +101,13 @@ def load_vicreg_cifar10(batch_size=256, num_workers=2, root="./data"):
 
     return train_loader, test_loader
 
-    return train_loader, test_loader
+
+def load_dataset_cifar10():
+    return datasets.CIFAR10(
+        root="./data", train=True, download=True, transform=transforms.ToTensor()
+    ), datasets.CIFAR10(
+        root="./data", train=False, download=True, transform=transforms.ToTensor()
+    )
 
 
 def load_cifar10(batch_size=256, num_workers=2, root="./data"):
@@ -236,87 +242,6 @@ def load_combined_test_set(batch_size=256, num_workers=2, root="./data"):
 
     return combined_loader
 
-
-def get_representations(
-    encoder: torch.nn.Module, data_loader: DataLoader, device: Optional[str] = None
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Extract representations and labels from a model using a given data loader.
-
-    Args:
-        model (torch.nn.Module): The model to extract representations from.
-        data_loader (DataLoader): DataLoader containing the dataset.
-        device (str): Device to run the model on ('cuda' or 'cpu').
-
-    Returns:
-        Tuple[np.ndarray, np.ndarray]: Representations and corresponding labels.
-    """
-    encoder.eval()
-    representations = []
-    labels = []
-    device = device or DEVICE
-    with torch.no_grad():
-        for images, batch_labels in tqdm(data_loader, desc="Extracting representations"):
-            images = images.to(device)
-            batch_representations = encoder(images)
-            representations.append(batch_representations.cpu().numpy())
-            labels.append(batch_labels.numpy())
-
-    return np.concatenate(representations), np.concatenate(labels)
-
-
-def find_k_nearest_neighbors(
-    representations: np.ndarray, k: int
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Find k nearest neighbors for each representation using FAISS, with optional GPU support.
-    Searches in chunks of 100 to manage memory usage.
-
-    Args:
-        representations (np.ndarray): 2D array of representations, shape (n_samples, n_features)
-        k (int): Number of nearest neighbors to find
-
-    Returns:
-        Tuple[torch.Tensor, torch.Tensor]:
-            - indices: 2D tensor of indices of k nearest neighbors, shape (n_samples, k)
-            - distances: 2D tensor of distances to k nearest neighbors, shape (n_samples, k)
-    """
-    n_samples, n_features = representations.shape
-
-    # Convert to correct data type
-    representations = representations.astype(np.float32)
-
-    # Create the index
-    if torch.cuda.is_available():
-        res = faiss.StandardGpuResources()
-        index = faiss.GpuIndexFlatL2(res, n_features)
-        print("Using GPU for nearest neighbor search.")
-    else:
-        index = faiss.IndexFlatL2(n_features)
-        print("Using CPU for nearest neighbor search.")
-
-    # Add vectors to the index
-    index.add(representations)
-
-    # Search for k nearest neighbors in chunks
-    print("Searching for nearest neighbors...")
-    chunk_size = 10
-    all_indices = []
-    all_distances = []
-
-    for i in tqdm(range(0, n_samples, chunk_size)):
-        chunk = representations[i : i + chunk_size]
-        distances, indices = index.search(chunk, k + 1)  # +1 to exclude self
-        all_indices.append(indices[:, 1:])  # Remove self from results
-        all_distances.append(distances[:, 1:])
-
-    # Concatenate results
-    indices = np.concatenate(all_indices, axis=0)
-    distances = np.concatenate(all_distances, axis=0)
-
-    return torch.tensor(indices), torch.tensor(distances)
-
-
 class NearestNeighborDataset(Dataset):
 
     def __init__(
@@ -399,24 +324,10 @@ def load_nearest_neighbors_dataloader(
     ds_test = datasets.CIFAR10(
         root=root, train=False, download=True, transform=transforms.ToTensor()
     )
-    dl_train = DataLoader(
-        ds_train,
-        batch_size=batch_for_compute,
-        shuffle=False,
-        num_workers=num_workers,
-        pin_memory=True,
-    )
-    dl_test = DataLoader(
-        ds_test,
-        batch_size=batch_for_compute,
-        shuffle=False,
-        num_workers=num_workers,
-        pin_memory=True,
-    )
 
     # Extract representations from the dataset
-    rep_test, _ = get_representations(encoder, dl_test)
-    rep_train, _ = get_representations(encoder, dl_train)
+    rep_test, _ = get_representations(encoder, ds_test)
+    rep_train, _ = get_representations(encoder, ds_train)
 
     # Find k nearest neighbors
     neighbor_indices_test, _ = find_k_nearest_neighbors(rep_test, k)
@@ -441,41 +352,3 @@ def load_nearest_neighbors_dataloader(
     )
 
     return near_neig_dl_train, near_neig_dl_test
-
-
-def test():
-    # Test the loaders
-    # cifar_train, cifar_test = load_cifar10()
-    # mnist_train, mnist_test = load_mnist()
-    # combined_test = load_combined_test_set()
-    vicreg_train, _ = load_vicreg_cifar10()
-
-    # print(
-    #     f"CIFAR10 - Train: {len(cifar_train.dataset)}, Test: {len(cifar_test.dataset)}"
-    # )
-    # print(f"MNIST - Train: {len(mnist_train.dataset)}, Test: {len(mnist_test.dataset)}")
-    # print(f"Combined Test Set: {len(combined_test.dataset)}")
-    # print(f"VICReg CIFAR10 - Train: {len(vicreg_train.dataset)}")
-
-    # Verify data shapes
-    # for images, labels in cifar_train:
-    #     print(f"CIFAR10 batch shape: {images.shape}")
-    #     break
-
-    # for images, labels in mnist_train:
-    #     print(f"MNIST batch shape: {images.shape}")
-    #     break
-
-    # for images, labels in combined_test:
-    #     print(f"Combined test batch shape: {images.shape}")
-    #     print(f"Combined test labels: {labels.unique()}")
-    #     break
-
-    for z, z_prime in vicreg_train:
-        px.imshow(z[0].permute(1, 2, 0).cpu().numpy()).show()
-        px.imshow(z_prime[0].permute(1, 2, 0).cpu().numpy()).show()
-        break
-
-
-if __name__ == "__main__":
-    test()
