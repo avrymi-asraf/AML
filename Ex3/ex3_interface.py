@@ -35,8 +35,8 @@ he_md = lambda x: display(Markdown(f'<div dir="rtl" lang="he" xml:lang="he">{x}<
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# # @title Only for colab
-#!pip install -q faiss-gpu
+# @title Only for colab
+# !pip install -q faiss-gpu
 # !rm -rf /content/sample_data
 # !rm -rf /content/src
 # !mkdir src
@@ -59,7 +59,7 @@ from src.data_load import (
     load_dataset_cifar10,
 )
 from src.utilities import get_representations, retrieval_evaluation
-from src.train_functoin import train_vicreg,train_linear_probe
+from src.train_functoin import train_vicreg, train_linear_probe
 from src.plot_functoins import (
     visualize_linear_probe_predictions,
     visualize_representations,
@@ -214,7 +214,7 @@ Compute the linear probing accuracy, and report it. Is the accuracy different fr
 
 
 batch_size = 256
-epochs = 30
+epochs = 1
 
 
 old_viceg = VICreg().to(DEVICE)
@@ -296,10 +296,6 @@ images far apart? Explain the differences between the methods in detail, as seen
 select more than 1 image for a specific class if you wish to get a better understanding (Although it is not mandatory).
 """
 
-test_dataset, test_dataset = load_dataset_cifar10()
-
-test_dataset.data[[0,1,2]].shape
-
 # @title Load VicReg encoder and NearNeig encoder
 
 
@@ -318,7 +314,7 @@ train_dataset, test_dataset = load_dataset_cifar10()
 sampels = retrieval_evaluation(
     vic_reg_encoder, near_neig_encoder, train_dataset, test_dataset, DEVICE
 )
-visualize_retrieval_evaluation(sampels,train_dataset)
+visualize_retrieval_evaluation(sampels, train_dataset)
 
 """# Q1 - Anomaly Detection.
 Using the CIFAR10 training data as reference for normal data, compute the kNN
