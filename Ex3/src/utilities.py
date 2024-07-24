@@ -143,8 +143,8 @@ def select_samples_by_class(
     target_total = samples_per_class * len(dataset.class_to_idx)
 
     for image, label in dataset:
-        if len(result[label.item()]["image"]) < samples_per_class:
-            result[label.item()]["image"].append(image)
+        if len(result[label]["image"]) < samples_per_class:
+            result[label]["image"].append(image)
             total_samples += 1
 
         if total_samples == target_total:
@@ -154,7 +154,7 @@ def select_samples_by_class(
 
 
 def retrieval_evaluation(
-    vic_reg_model, near_neig_model, test_dataset, train_dataset, device
+    vic_reg_encoder, near_neig_encoder, test_dataset, train_dataset, device
 ):
     """
     Perform retrieval evaluation for VICReg and Near Neighbor models.
@@ -175,19 +175,22 @@ def retrieval_evaluation(
 
     # Get representations for sample images
     for cls in samples:
+        im_to_model = torch.stack(
+            [samples[cls]["image"][0], samples[cls]["image"][0].clone()]
+        ).to(device)
         samples[cls]["repr_vic_reg"] = (
-            vic_reg_model.encoder(samples[cls]["image"][0].to(device)).cpu().detach()
+            vic_reg_encoder(im_to_model).cpu().detach()[0].unsqueeze(0)
         )
         samples[cls]["repr_near_neig"] = (
-            near_neig_model.encoder(samples[cls]["image"][0].to(device)).cpu().detach()
+            near_neig_encoder(im_to_model).cpu().detach()[0].unsqueeze(0)
         )
 
     # Get representations for all training images
     repr_vic_reg, _ = get_representations(
-        vic_reg_model.encoder, train_dataset, device=device
+        vic_reg_encoder.encoder, train_dataset, device=device
     )
     repr_near_neig, _ = get_representations(
-        near_neig_model.encoder, train_dataset, device=device
+        near_neig_encoder.encoder, train_dataset, device=device
     )
 
     repr_vic_reg = torch.tensor(repr_vic_reg)
