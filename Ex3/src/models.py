@@ -59,9 +59,9 @@ class LinearProbe(nn.Module):
             return torch.argmax(self.forward(x), dim=1)
 
 
-class VICeg(nn.Module):
+class VICreg(nn.Module):
     def __init__(self, en_dim=128, prj_dim=512):
-        super(VICeg, self).__init__()
+        super(VICreg, self).__init__()
         self.encoder = Encoder(D=en_dim, device=DEVICE)
         self.projector = Projector(D=en_dim, proj_dim=prj_dim)
 
