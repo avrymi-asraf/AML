@@ -9,7 +9,7 @@ import faiss
 from typing import Callable, Optional, Tuple
 import random
 
-from Ex3.ex3_interface import DEVICE
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 train_transform = transforms.Compose(
