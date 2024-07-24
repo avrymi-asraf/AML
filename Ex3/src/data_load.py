@@ -270,15 +270,16 @@ def find_k_nearest_neighbors(
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Find k nearest neighbors for each representation using FAISS, with optional GPU support.
+    Searches in chunks of 100 to manage memory usage.
 
     Args:
         representations (np.ndarray): 2D array of representations, shape (n_samples, n_features)
-        k (int):
+        k (int): Number of nearest neighbors to find
 
     Returns:
-        Tuple[np.ndarray, np.ndarray]:
-            - indices: 2D array of indices of k nearest neighbors, shape (n_samples, k)
-            - distances: 2D array of distances to k nearest neighbors, shape (n_samples, k)
+        Tuple[torch.Tensor, torch.Tensor]:
+            - indices: 2D tensor of indices of k nearest neighbors, shape (n_samples, k)
+            - distances: 2D tensor of distances to k nearest neighbors, shape (n_samples, k)
     """
     n_samples, n_features = representations.shape
 
@@ -286,7 +287,6 @@ def find_k_nearest_neighbors(
     representations = representations.astype(np.float32)
 
     # Create the index
-    # Check if CUDA is available
     if torch.cuda.is_available():
         res = faiss.StandardGpuResources()
         index = faiss.GpuIndexFlatL2(res, n_features)
@@ -298,12 +298,23 @@ def find_k_nearest_neighbors(
     # Add vectors to the index
     index.add(representations)
 
-    # Search for k nearest neighbors
+    # Search for k nearest neighbors in chunks
     print("Searching for nearest neighbors...")
-    distances, indices = index.search(representations, k + 1)  # +1 to exclude self
+    chunk_size = 10
+    all_indices = []
+    all_distances = []
 
-    # Remove self from results (first column)
-    return torch.tensor(indices[:, 1:]), torch.tensor(distances[:, 1:])
+    for i in tqdm(range(0, n_samples, chunk_size)):
+        chunk = representations[i : i + chunk_size]
+        distances, indices = index.search(chunk, k + 1)  # +1 to exclude self
+        all_indices.append(indices[:, 1:])  # Remove self from results
+        all_distances.append(distances[:, 1:])
+
+    # Concatenate results
+    indices = np.concatenate(all_indices, axis=0)
+    distances = np.concatenate(all_distances, axis=0)
+
+    return torch.tensor(indices), torch.tensor(distances)
 
 
 class NearestNeighborDataset(Dataset):
