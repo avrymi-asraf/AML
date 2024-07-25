@@ -152,7 +152,12 @@ def load_dataset_mnist(root="./data"):
     Load MNIST dataset.
     """
     mnist_transform = transforms.Compose(
-        [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
+        [
+            transforms.Resize((32, 32)),
+            transforms.Grayscale(3),
+            transforms.ToTensor(),
+            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261)),
+        ]
     )
 
     return datasets.MNIST(
