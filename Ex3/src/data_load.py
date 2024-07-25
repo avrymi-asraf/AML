@@ -147,6 +147,19 @@ def load_cifar10(batch_size=256, num_workers=2, root="./data"):
     return train_loader, test_loader
 
 
+def load_dataset_mnist(root="./data"):
+    """
+    Load MNIST dataset.
+    """
+    mnist_transform = transforms.Compose(
+        [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
+    )
+
+    return datasets.MNIST(
+        root=root, train=True, download=True, transform=mnist_transform
+    ), datasets.MNIST(root=root, train=False, download=True, transform=mnist_transform)
+
+
 def load_mnist(batch_size=256, num_workers=2, root="./data"):
     """
     Load MNIST dataset.
@@ -159,7 +172,6 @@ def load_mnist(batch_size=256, num_workers=2, root="./data"):
     Returns:
     - train_loader, test_loader: DataLoader objects for training and testing
     """
-    # Define transforms for MNIST
     mnist_transform = transforms.Compose(
         [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
     )
@@ -191,13 +203,11 @@ def load_mnist(batch_size=256, num_workers=2, root="./data"):
 
 def load_combined_test_set(batch_size=256, num_workers=2, root="./data"):
     """
-    Load a combined test set of CIFAR10 and MNIST for anomaly detection.
-    CIFAR10 images are treated as normal, MNIST images as anomalies.
 
     Args:
-    - batch_size (int): Batch size for dataloaders
-    - num_workers (int): Number of workers for dataloaders
-    - root (str): Root directory for dataset storage
+    - batch_size (int):
+    - num_workers (int): default=2
+    - root (str):
 
     Returns:
     - combined_test_loader: DataLoader object for the combined test set
@@ -219,17 +229,10 @@ def load_combined_test_set(batch_size=256, num_workers=2, root="./data"):
         ),
     )
 
-    # Create a subset of MNIST to match CIFAR10 test set size
-    mnist_subset = Subset(mnist_test, range(len(cifar10_test)))
+    combined_dataset = torch.utils.data.ConcatDataset([cifar10_test, mnist_test])
 
-    # Combine datasets
-    combined_dataset = torch.utils.data.ConcatDataset([cifar10_test, mnist_subset])
-
-    # Create labels: 0 for CIFAR10 (normal), 1 for MNIST (anomaly)
-    labels = torch.cat([torch.zeros(len(cifar10_test)), torch.ones(len(mnist_subset))])
-
-    # Create a custom dataset that includes these labels
-
+    # 0 for CIFAR10, 1 for MNIST
+    labels = torch.cat([torch.zeros(len(cifar10_test)), torch.ones(len(mnist_test))])
     combined_dataset = CombinedDataset(combined_dataset, labels)
 
     combined_loader = DataLoader(
@@ -241,6 +244,7 @@ def load_combined_test_set(batch_size=256, num_workers=2, root="./data"):
     )
 
     return combined_loader
+
 
 class NearestNeighborDataset(Dataset):
 
