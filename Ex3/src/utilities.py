@@ -1,3 +1,4 @@
+import dis
 from typing import Any, Dict, List, Tuple
 import numpy as np
 import torch
@@ -117,15 +118,19 @@ def find_nearest_and_farthest(
 
 
 def compute_knn_density(
-    train_representations: np.ndarray, test_representations: np.ndarray, k: int = 2
+    train_representations: np.ndarray,
+    test_representations: np.ndarray,
+    k: int = 2,
+    reduce: str = "mean",
 ) -> np.ndarray:
     """
-    Compute kNN density test in train 
+    Compute kNN density test in train
 
     Args:
-        train_representations (np.ndarray): 
-        test_representations (np.ndarray): 
-        k (int): 
+        train_representations (np.ndarray):
+        test_representations (np.ndarray):
+        k (int):
+        reduce (str): (default: "mean")
 
     Returns:
         float: mean of knn density
@@ -134,9 +139,10 @@ def compute_knn_density(
     index = faiss.IndexFlatL2(train_representations.shape[1])
     index.add(train_representations.astype(np.float32))
     distances, _ = index.search(test_representations.astype(np.float32), k + 1)
-    inverse_density_scores = np.mean(distances[:, 1:])
-
-    return inverse_density_scores
+    if reduce == "mean":
+        return np.mean(distances[:, 1:])
+    else:
+        return distances[:, 1:]
 
 
 def select_samples_by_class(
