@@ -36,18 +36,18 @@ he_md = lambda x: display(Markdown(f'<div dir="rtl" lang="he" xml:lang="he">{x}<
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # @title Only for colab
-# !pip install -q faiss-gpu
-# !rm -rf /content/sample_data
-# !rm -rf /content/src
-# !mkdir src
+!pip install -q faiss-gpu
+!rm -rf /content/sample_data
+!rm -rf /content/src
+!mkdir src
 
-# !wget -O /content/src/data_load.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/data_load.py
-# !wget -O /content/src/models.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/models.py
-# !wget -O /content/src/vicreg_objectives.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/vicreg_objectives.py
-# !wget -O /content/src/train_functoin.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/train_functoin.py
-# !wget -O /content/src/plot_functoins.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/plot_functoins.py
-# !wget -O /content/src/utilities.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/utilities.py
-# clear_output()
+!wget -O /content/src/data_load.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/data_load.py
+!wget -O /content/src/models.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/models.py
+!wget -O /content/src/vicreg_objectives.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/vicreg_objectives.py
+!wget -O /content/src/train_functoin.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/train_functoin.py
+!wget -O /content/src/plot_functoins.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/plot_functoins.py
+!wget -O /content/src/utilities.py https://raw.githubusercontent.com/avrymi-asraf/AML/main/Ex3/src/utilities.py
+clear_output()
 
 # for local machine
 from src.models import Encoder, Projector, LinearProbe, VICreg
@@ -57,13 +57,15 @@ from src.data_load import (
     load_vicreg_cifar10,
     load_nearest_neighbors_dataloader,
     load_dataset_cifar10,
+    load_combined_test_set,
+    load_dataset_mnist,
 )
-from src.utilities import get_representations, retrieval_evaluation
-from src.train_functoin import train_vicreg, train_linear_probe
+from src.utilities import get_representations, retrieval_evaluation, compute_knn_density
+from src.train_functoin import train_vicreg,train_linear_probe
 from src.plot_functoins import (
     visualize_linear_probe_predictions,
     visualize_representations,
-    visualize_retrieval_evaluation,
+    visualize_retrieval_results,
 )
 
 """# Q1: Training
@@ -214,7 +216,7 @@ Compute the linear probing accuracy, and report it. Is the accuracy different fr
 
 
 batch_size = 256
-epochs = 1
+epochs = 30
 
 
 old_viceg = VICreg().to(DEVICE)
@@ -314,14 +316,76 @@ train_dataset, test_dataset = load_dataset_cifar10()
 sampels = retrieval_evaluation(
     vic_reg_encoder, near_neig_encoder, train_dataset, test_dataset, DEVICE
 )
-visualize_retrieval_evaluation(sampels, train_dataset)
+visualize_retrieval_results(sampels,train_dataset)
 
 """# Q1 - Anomaly Detection.
 Using the CIFAR10 training data as reference for normal data, compute the kNN
 density estimation for all the (CIFAR10 + MNIST) test set representations. Do this for both (i) VICReg (ii) VICReg
 without generated neighbors. Use k = 2.
 
-# Q2 - ROC AUC Evaluation
+"""
+
+from Ex3.src.data_load import load_dataset_mnist, load_mnist
+
+
+vic_reg_model = VICreg().to(DEVICE)
+vic_reg_model.load_state_dict(torch.load("vicreg_30_run.pt", map_location=DEVICE))
+vic_reg_encoder = vic_reg_model.encoder
+
+near_neig_model = VICreg().to(DEVICE)
+near_neig_model.load_state_dict(
+    torch.load("vicreg_near_neig_30_run.pt", map_location=DEVICE)
+)
+near_neig_encoder = near_neig_model.encoder
+
+cifar10_train_dataset, cifar10_test_dataset = load_dataset_cifar10()
+_,mnist_test_dataset = load_dataset_mnist()
+
+# @title Anomaly Detection for vicreg model
+vic_reg_train_repr, _ = get_representations(
+    vic_reg_encoder, cifar10_train_dataset, DEVICE
+)
+vic_reg_test_cifar10_repr = get_representations(
+    vic_reg_encoder, cifar10_test_dataset, DEVICE
+)
+vic_reg_test_mnist_repr = get_representations(
+    vic_reg_encoder, mnist_test_dataset, DEVICE
+)
+
+knn_desnity_cifar10 = compute_knn_density(vic_reg_train_repr, vic_reg_test_cifar10_repr)
+knn_desnity_mnist = compute_knn_density(vic_reg_train_repr, vic_reg_test_mnist_repr)
+
+md(
+    f"# VICreg CIFAR10 Anomaly Detection\n"
+    f"##cifar10 test anomality\n### ${knn_desnity_cifar10}\n$"
+    f"## mnist test anomality\n### ${knn_desnity_mnist}$"
+)
+
+# @title Anomaly Detection for near neig model
+near_neig_reg_train_repr, _ = get_representations(
+    near_neig_encoder, cifar10_train_dataset, DEVICE
+)
+near_neig_reg_test_cifar10_repr = get_representations(
+    near_neig_encoder, cifar10_test_dataset, DEVICE
+)
+near_neig_reg_test_mnist_repr = get_representations(
+    near_neig_encoder, mnist_test_dataset, DEVICE
+)
+
+knn_desnity_cifar10 = compute_knn_density(
+    near_neig_reg_train_repr, near_neig_reg_test_cifar10_repr
+)
+knn_desnity_mnist = compute_knn_density(
+    near_neig_reg_train_repr, near_neig_reg_test_mnist_repr
+)
+
+md(
+    f"# Nearest Neigbrhood CIFAR10 Anomaly Detection\n"
+    f"##cifar10 test anomality\n### ${knn_desnity_cifar10}\n$"
+    f"## mnist test anomality\n### ${knn_desnity_mnist}$"
+)
+
+"""# Q2 - ROC AUC Evaluation
 Plot the ROC Curve of both methods. Use the sklearn library for creating these
 figures. In the title / legend incorporate the AUC of each method. Which method is ’better’? In a sentence or two,
 explain why do you think its better.
