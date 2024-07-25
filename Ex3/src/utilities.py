@@ -21,15 +21,14 @@ def get_representations(
     encoder: torch.nn.Module, dataset: Dataset, device: Optional[str] = None
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Extract representations and labels from a model using a given data loader.
 
     Args:
-        model (torch.nn.Module): The model to extract representations from.
-        data_loader (DataLoader): DataLoader containing the dataset.
-        device (str): Device to run the model on ('cuda' or 'cpu').
+        model (torch.nn.Module):
+        dataset (Dataset):
+        device (str):
 
     Returns:
-        Tuple[np.ndarray, np.ndarray]: Representations and corresponding labels.
+        Tuple[np.ndarray, np.ndarray]:  representations, labels
     """
     encoder.eval()
     representations = []
@@ -117,6 +116,29 @@ def find_nearest_and_farthest(
     return nearest_indices, farthest_indices
 
 
+def compute_knn_density(
+    train_representations: np.ndarray, test_representations: np.ndarray, k: int = 2
+) -> np.ndarray:
+    """
+    Compute kNN density test in train 
+
+    Args:
+        train_representations (np.ndarray): 
+        test_representations (np.ndarray): 
+        k (int): 
+
+    Returns:
+        float: mean of knn density
+    """
+    # Use FAISS for efficient nearest neighbor search
+    index = faiss.IndexFlatL2(train_representations.shape[1])
+    index.add(train_representations.astype(np.float32))
+    distances, _ = index.search(test_representations.astype(np.float32), k + 1)
+    inverse_density_scores = np.mean(distances[:, 1:])
+
+    return inverse_density_scores
+
+
 def select_samples_by_class(
     dataset: Dataset, samples_per_class: int = 1
 ) -> Dict[int, Dict[str, Any]]:
@@ -157,23 +179,22 @@ def retrieval_evaluation(
     vic_reg_encoder, near_neig_encoder, test_dataset, train_dataset, device
 ):
     """
-    Perform retrieval evaluation for VICReg and Near Neighbor models.
+
 
     Args:
     vic_reg_model (nn.Module):
     near_neig_model (nn.Module): Trained Near Neighbor model
     test_dataset (torch.utils.data.Dataset): Test dataset
     train_dataset (torch.utils.data.Dataset): Training dataset
-    device (str): Device to run the models on ('cuda' or 'cpu')
+    device (str):
 
     Returns:
     dict:
     """
-
-    # Select sample images
+    # todo: the functoin not working when in on in file,
+    #  only when in on in the notebook :(
     samples = select_samples_by_class(test_dataset)
 
-    # Get representations for sample images
     for cls in samples:
         im_to_model = torch.stack(
             [samples[cls]["image"][0], samples[cls]["image"][0].clone()]
@@ -185,10 +206,7 @@ def retrieval_evaluation(
             near_neig_encoder(im_to_model).cpu().detach()[0].unsqueeze(0)
         )
 
-    # Get representations for all training images
-    repr_vic_reg, _ = get_representations(
-        vic_reg_encoder, train_dataset, device=device
-    )
+    repr_vic_reg, _ = get_representations(vic_reg_encoder, train_dataset, device=device)
     repr_near_neig, _ = get_representations(
         near_neig_encoder, train_dataset, device=device
     )
@@ -196,7 +214,6 @@ def retrieval_evaluation(
     repr_vic_reg = torch.tensor(repr_vic_reg)
     repr_near_neig = torch.tensor(repr_near_neig)
 
-    # Find nearest and farthest neighbors
     for cls in samples:
         nearest_vic, farthest_vic = find_nearest_and_farthest(
             samples[cls]["repr_vic_reg"], repr_vic_reg
@@ -213,7 +230,7 @@ def retrieval_evaluation(
     return samples
 
 
-def save_pickle(obj, path:str):
+def save_pickle(obj, path: str):
     """
     Save an object to a pickle file.
 
@@ -222,10 +239,12 @@ def save_pickle(obj, path:str):
     path (str): Path to save the object to
     """
     import pickle
+
     with open(path, "wb") as f:
         pickle.dump(obj, f)
 
-def load_pikcle(path:str):
+
+def load_pikcle(path: str):
     """
     Load an object from a pickle file.
 
@@ -236,5 +255,6 @@ def load_pikcle(path:str):
     Any: The loaded object
     """
     import pickle
+
     with open(path, "rb") as f:
         return pickle.load(f)
