@@ -155,8 +155,9 @@ def visualize_representations(
 
 def visualize_retrieval_results(samples, train_dataset, num_neighbors=5):
     """
+    write by chatgpt
     Visualize retrieval results for VICReg and Near Neighbor models.
-
+    
     Args:
     samples (Dict[int, Dict[str, Any]]): Output from retrieval_evaluation function.
         Each inner dict contains:
