@@ -211,3 +211,30 @@ def retrieval_evaluation(
         samples[cls]["repr_near_neig_far"] = farthest_near_neig
 
     return samples
+
+
+def save_pickle(obj, path:str):
+    """
+    Save an object to a pickle file.
+
+    Args:
+    obj: Object to save
+    path (str): Path to save the object to
+    """
+    import pickle
+    with open(path, "wb") as f:
+        pickle.dump(obj, f)
+
+def load_pikcle(path:str):
+    """
+    Load an object from a pickle file.
+
+    Args:
+    path (str): Path to the pickle file
+
+    Returns:
+    Any: The loaded object
+    """
+    import pickle
+    with open(path, "rb") as f:
+        return pickle.load(f)
