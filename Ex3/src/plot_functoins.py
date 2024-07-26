@@ -155,18 +155,17 @@ def visualize_representations(
 
 def visualize_retrieval_results(samples, train_dataset, num_neighbors=5):
     """
-    write by chatgpt
     Visualize retrieval results for VICReg and Near Neighbor models.
-    
+
     Args:
     samples (Dict[int, Dict[str, Any]]): Output from retrieval_evaluation function.
         Each inner dict contains:
-        - 'image': List[torch.Tensor], the query image
+        - 'image': torch.Tensor, the query image
         - 'names': str, class name
-        - 'repr_vic_reg_near': torch.Tensor, indices of nearest neighbors for VICReg
-        - 'repr_vic_reg_far': torch.Tensor, indices of farthest neighbors for VICReg
-        - 'repr_near_neig_near': torch.Tensor, indices of nearest neighbors for Near Neighbor
-        - 'repr_near_neig_far': torch.Tensor, indices of farthest neighbors for Near Neighbor
+        - 'nearest_vic_reg': torch.Tensor, nearest neighbors for VICReg
+        - 'farest_vic_reg': torch.Tensor, farthest neighbors for VICReg
+        - 'nearest_near_neig': torch.Tensor, nearest neighbors for Near Neighbor
+        - 'farest_near_neig': torch.Tensor, farthest neighbors for Near Neighbor
     train_dataset (Dataset): The training dataset used for retrieval
     num_neighbors (int): Number of neighbors to display (default: 5)
 
@@ -187,7 +186,7 @@ def visualize_retrieval_results(samples, train_dataset, num_neighbors=5):
         axes = axes.reshape(1, -1)
 
     for idx, (cls, sample) in enumerate(samples.items()):
-        query_image = sample["image"][0]
+        query_image = sample["image"]
 
         # Plot query image
         axes[idx, 0].imshow(query_image.permute(1, 2, 0).cpu().numpy())
@@ -195,11 +194,10 @@ def visualize_retrieval_results(samples, train_dataset, num_neighbors=5):
         axes[idx, 0].axis("off")
 
         # Helper function to plot neighbors
-        def plot_neighbors(start_col, indices, title_prefix):
+        def plot_neighbors(start_col, neighbors, title_prefix):
             for j in range(num_neighbors):
-                if j < indices.shape[1]:
-                    neighbor_idx = indices[0, j].item()
-                    neighbor_image, _ = train_dataset[neighbor_idx]
+                if j < len(neighbors):
+                    neighbor_image = neighbors[j]
                     axes[idx, start_col + j].imshow(
                         neighbor_image.permute(1, 2, 0).cpu().numpy()
                     )
@@ -207,21 +205,27 @@ def visualize_retrieval_results(samples, train_dataset, num_neighbors=5):
                 axes[idx, start_col + j].axis("off")
 
         # Plot VICReg nearest neighbors
-        plot_neighbors(1, sample["repr_vic_reg_near"], "VICReg\nNearest")
+        plot_neighbors(1, sample["nearest_vic_reg"][:num_neighbors], "VICReg\nNearest")
 
         # Plot VICReg farthest neighbors
         plot_neighbors(
-            1 + num_neighbors, sample["repr_vic_reg_far"], "VICReg\nFarthest"
+            1 + num_neighbors,
+            sample["farest_vic_reg"][:num_neighbors],
+            "VICReg\nFarthest",
         )
 
         # Plot Near Neighbor nearest neighbors
         plot_neighbors(
-            1 + 2 * num_neighbors, sample["repr_near_neig_near"], "NearNeig\nNearest"
+            1 + 2 * num_neighbors,
+            sample["nearest_near_neig"][:num_neighbors],
+            "NearNeig\nNearest",
         )
 
         # Plot Near Neighbor farthest neighbors
         plot_neighbors(
-            1 + 3 * num_neighbors, sample["repr_near_neig_far"], "NearNeig\nFarthest"
+            1 + 3 * num_neighbors,
+            sample["farest_near_neig"][:num_neighbors],
+            "NearNeig\nFarthest",
         )
 
     plt.tight_layout()
