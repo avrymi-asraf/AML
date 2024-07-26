@@ -169,8 +169,8 @@ def find_nearest_and_farthest(
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """ """
     distances = distances[query_ind]
-    _, nearest = torch.topk(distances, k + 1, largest=False)
-    _, farthest = torch.topk(distances, k + 1, largest=True)
+    nearest = torch.topk(distances, k + 1, largest=False).indices[1:]
+    farthest = torch.topk(distances, k, largest=True).indices
     return nearest, farthest
 
 

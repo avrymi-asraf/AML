@@ -199,8 +199,7 @@ def visualize_retrieval_results(samples, train_dataset, num_neighbors=5):
                 if j < len(neighbors):
                     neighbor_image = neighbors[j]
                     axes[idx, start_col + j].imshow(
-                        neighbor_image.permute(1, 2, 0).cpu().numpy()
-                    )
+                        neighbor_image)
                     axes[idx, start_col + j].set_title(f"{title_prefix} {j+1}")
                 axes[idx, start_col + j].axis("off")
 
