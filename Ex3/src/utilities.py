@@ -1,4 +1,5 @@
 import dis
+from turtle import distance
 from typing import Any, Dict, List, Tuple
 import numpy as np
 import torch
@@ -97,26 +98,6 @@ def find_k_nearest_neighbors(
     return torch.tensor(indices), torch.tensor(distances)
 
 
-def find_nearest_and_farthest(
-    representations: torch.Tensor, dataset_representations: torch.Tensor, k: int = 5
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Find k nearest and k farthest neighbors for each representation.
-
-    Args:
-    representations (torch.Tensor): (num_queries, representation_dim)
-    dataset_representations (torch.Tensor):  (num_samples, representation_dim)
-    k (int): (default: 5)
-
-    Returns:
-    Tuple[torch.Tensor, torch.Tensor]: nearest (num_queries, k), farthest (num_queries, k)
-    """
-    distances = torch.cdist(representations, dataset_representations)
-    nearest_indices = torch.topk(distances, k, dim=1, largest=False).indices
-    farthest_indices = torch.topk(distances, k, dim=1, largest=True).indices
-    return nearest_indices, farthest_indices
-
-
 def compute_knn_density(
     train_representations: np.ndarray,
     test_representations: np.ndarray,
@@ -145,9 +126,7 @@ def compute_knn_density(
         return distances[:, 1:]
 
 
-def select_samples_by_class(
-    dataset: Dataset, samples_per_class: int = 1
-) -> Dict[int, Dict[str, Any]]:
+def select_samples_by_class(dataset: Dataset) -> Dict[int, Dict[str, Any]]:
     """
     Select samples from the dataset, organized by class.
 
@@ -157,22 +136,26 @@ def select_samples_by_class(
 
     Returns:
     Dict[int, Dict[str, List]]:
-        - 'image':
+    - class_idx:(int)
+        - 'image':(torch.Tensor, shape: (3, 32, 32))
         - 'names': (string)
+        - 'ind_image': (int)
 
     """
 
     result = {
-        class_idx: {"image": [], "names": class_name}
+        class_idx: {"names": class_name}
         for class_name, class_idx in dataset.class_to_idx.items()
     }
 
     total_samples = 0
-    target_total = samples_per_class * len(dataset.class_to_idx)
+    target_total = len(dataset.class_to_idx)
 
-    for image, label in dataset:
-        if len(result[label]["image"]) < samples_per_class:
-            result[label]["image"].append(image)
+    for i in range(len(dataset)):
+        image, label = dataset[i]
+        if not ("image" in result[label]):
+            result[label]["image"] = image
+            result[label]["ind_image"] = i
             total_samples += 1
 
         if total_samples == target_total:
@@ -181,9 +164,17 @@ def select_samples_by_class(
     return result
 
 
-def retrieval_evaluation(
-    vic_reg_encoder, near_neig_encoder, test_dataset, train_dataset, device
-):
+def find_nearest_and_farthest(
+    distances: torch.Tensor, query_ind: int, k: int = 5
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """ """
+    distances = distances[query_ind]
+    _, nearest = torch.topk(distances, k + 1, largest=False)
+    _, farthest = torch.topk(distances, k + 1, largest=True)
+    return nearest, farthest
+
+
+def retrieval_evaluation(vic_reg_encoder, near_neig_encoder, train_dataset, device):
     """
 
 
@@ -194,44 +185,43 @@ def retrieval_evaluation(
     train_dataset (torch.utils.data.Dataset): Training dataset
     device (str):
 
+
     Returns:
-    dict:
+    Dict[int, Dict[str, List]]:
+    - class_idx:(int)
+        - 'image':(torch.Tensor, shape: (3, 32, 32))
+        - 'names': (string)
+        - 'ind_image': (int)
+        - 'repr_vic_reg': (torch.Tensor, shape: (1, representation_dim))
+        - 'repr_near_neig': (torch.Tensor, shape: (1, representation_dim))
+        - 'vic_reg_near_image': (torch.Tensor, shape: (5,3,32,32))
+        - 'vic_reg_far_image': (torch.Tensor, shape: (5,3,32,32))
+        - 'near_neig_near_image': (torch.Tensor, shape: (5,3,32,32))
+        - 'near_neig_far_image': (torch.Tensor, shape: (5,3,32,32))
     """
-    # todo: the functoin not working when in on in file,
-    #  only when in on in the notebook :(
-    samples = select_samples_by_class(test_dataset)
-
-    for cls in samples:
-        im_to_model = torch.stack(
-            [samples[cls]["image"][0], samples[cls]["image"][0].clone()]
-        ).to(device)
-        samples[cls]["repr_vic_reg"] = (
-            vic_reg_encoder(im_to_model).cpu().detach()[0].unsqueeze(0)
-        )
-        samples[cls]["repr_near_neig"] = (
-            near_neig_encoder(im_to_model).cpu().detach()[0].unsqueeze(0)
-        )
-
-    repr_vic_reg, _ = get_representations(vic_reg_encoder, train_dataset, device=device)
-    repr_near_neig, _ = get_representations(
-        near_neig_encoder, train_dataset, device=device
+    samples = select_samples_by_class(train_dataset)
+    repr_vic_reg = torch.tensor(
+        get_representations(vic_reg_encoder, train_dataset, device=device)[0]
+    )
+    repr_near_neig = torch.tensor(
+        get_representations(near_neig_encoder, train_dataset, device=device)[0]
     )
 
-    repr_vic_reg = torch.tensor(repr_vic_reg)
-    repr_near_neig = torch.tensor(repr_near_neig)
+    distances_vic_reg = torch.cdist(repr_vic_reg, repr_vic_reg)
+    distances_near_neig = torch.cdist(repr_near_neig, repr_near_neig)
 
     for cls in samples:
-        nearest_vic, farthest_vic = find_nearest_and_farthest(
-            samples[cls]["repr_vic_reg"], repr_vic_reg
+        idx_nearet_vic_reg, ind_farest_vic_reg = find_nearest_and_farthest(
+            distances_vic_reg, samples[cls]["ind_image"]
         )
-        samples[cls]["repr_vic_reg_near"] = nearest_vic
-        samples[cls]["repr_vic_reg_far"] = farthest_vic
+        idx_nearet_near_neig, ind_farest_near_neig = find_nearest_and_farthest(
+            distances_near_neig, samples[cls]["ind_image"]
+        )
+        samples[cls]["nearest_vic_reg"] = train_dataset.data[idx_nearet_vic_reg]
+        samples[cls]["farest_vic_reg"] = train_dataset.data[ind_farest_vic_reg]
 
-        nearest_near_neig, farthest_near_neig = find_nearest_and_farthest(
-            samples[cls]["repr_near_neig"], repr_near_neig
-        )
-        samples[cls]["repr_near_neig_near"] = nearest_near_neig
-        samples[cls]["repr_near_neig_far"] = farthest_near_neig
+        samples[cls]["nearest_near_neig"] = train_dataset.data[idx_nearet_near_neig]
+        samples[cls]["farest_near_neig"] = train_dataset.data[ind_farest_near_neig]
 
     return samples
 
