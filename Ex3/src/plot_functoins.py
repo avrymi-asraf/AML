@@ -287,3 +287,77 @@ def visualize_roc(knn_density_cifar10, knn_density_mnist, method_name):
     print(f"{method_name} AUC: {roc_auc:.4f}")
 
     return roc_auc
+
+
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import numpy as np
+import torch
+
+def unnormalize_image(img):
+    """
+    Unnormalize an image tensor.
+    
+    Args:
+    img (torch.Tensor): Normalized image tensor
+
+    Returns:
+    np.ndarray: Unnormalized image array
+    """
+    mean = torch.tensor([0.4914, 0.4822, 0.4465])
+    std = torch.tensor([0.247, 0.243, 0.261])
+    img = img * std[:, None, None] + mean[:, None, None]
+    return (img.clip(0, 1) * 255).byte().permute(1, 2, 0).cpu().numpy()
+
+def plot_most_anomalous_samples(cifar10_test_dataset, mnist_test_dataset, vic_reg_scores, near_neig_scores, num_samples=7):
+    """
+    Plot the most anomalous samples according to VICReg and VICReg without generated neighbors using Plotly.
+    Images are unnormalized before plotting.
+
+    Args:
+    cifar10_test_dataset (Dataset): CIFAR10 test dataset
+    mnist_test_dataset (Dataset): MNIST test dataset
+    vic_reg_scores (np.ndarray): Pre-computed anomaly scores for VICReg
+    near_neig_scores (np.ndarray): Pre-computed anomaly scores for Near Neighbor
+    num_samples (int): Number of most anomalous samples to plot
+
+    Returns:
+    None: Displays the interactive Plotly plot
+    """
+    assert len(vic_reg_scores) == len(near_neig_scores), "Scores must have the same length"
+
+    vic_reg_anomalous_indices = np.argsort(vic_reg_scores)[-num_samples:]
+    near_neig_anomalous_indices = np.argsort(near_neig_scores)[-num_samples:]
+
+    fig = make_subplots(
+        rows=2, cols=num_samples,
+        subplot_titles=[f'VICReg: {vic_reg_scores[i]:.2f}' for i in reversed(vic_reg_anomalous_indices)] +
+                       [f'Near Neighbor: {near_neig_scores[i]:.2f}' for i in reversed(near_neig_anomalous_indices)],
+        vertical_spacing=0.1
+    )
+
+    combined_dataset = torch.utils.data.ConcatDataset([cifar10_test_dataset, mnist_test_dataset])
+
+    for i, indices in enumerate([vic_reg_anomalous_indices, near_neig_anomalous_indices]):
+        for j, sample_idx in enumerate(reversed(indices)):
+            img, _ = combined_dataset[sample_idx]
+            img_array = unnormalize_image(img)
+            
+            fig.add_trace(
+                go.Image(z=img_array),
+                row=i+1, col=j+1
+            )
+
+    fig.update_layout(
+        title_text="Most Anomalous Samples",
+        height=600,
+        width=1200,
+    )
+
+    fig.update_xaxes(showticklabels=False)
+    fig.update_yaxes(showticklabels=False)
+
+    fig.show()
+
+# Usage example:
+# plot_most_anomalous_samples(cifar10_test_dataset, mnist_test_dataset, vic_reg_scores, near_neig_scores)
