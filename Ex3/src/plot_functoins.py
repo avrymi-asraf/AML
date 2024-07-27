@@ -309,7 +309,7 @@ def unnormalize_image(img):
     img = img * std[:, None, None] + mean[:, None, None]
     return (img.clip(0, 1) * 255).byte().permute(1, 2, 0).cpu().numpy()
 
-def plot_most_anomalous_samples(cifar10_test_dataset, mnist_test_dataset, vic_reg_scores, near_neig_scores, num_samples=7):
+def visualize_most_anomalous_samples(cifar10_test_dataset, mnist_test_dataset, vic_reg_scores, near_neig_scores, num_samples=7):
     """
     Plot the most anomalous samples according to VICReg and VICReg without generated neighbors using Plotly.
     Images are unnormalized before plotting.
