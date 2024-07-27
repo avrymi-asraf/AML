@@ -48,26 +48,40 @@ def train_vicreg(
     recorder = pd.DataFrame(
         columns=[
             "epoch",
-            "epoch_loss",
-            "inv_loss",
-            "var_loss",
-            "cov_loss",
+            "train_loss",
+            "inv_train_loss",
+            "var_train_loss",
+            "cov_tain_loss",
             "test_loss",
+            "inv_test_loss",
+            "var_test_loss",
+            "cov_test_loss",
         ],
         index=range(epochs),
     )
+    len_train = len(train_loader.dataset)
+    len_test = len(test_loader.dataset)
 
     for epoch in range(epochs):
         model.train()
-        epoch_loss = 1.0
+        inv_train_loss, var_train_loss, cov_train_loss, train_loss = (
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        )
         for i, (x1, x2) in tqdm(enumerate(train_loader)):
             x1, x2 = x1.to(device), x2.to(device)
             optimizer.zero_grad()
             z1, z2 = model(x1), model(x2)
-            loss = loss_function(z1, z2)
+            loss, loss_components = loss_function_detailed(z1, z2)
             loss.backward()
-            epoch_loss = loss.item() * 0.3 + epoch_loss * 0.7
             optimizer.step()
+
+            inv_train_loss += loss_components["inv_loss"]
+            var_train_loss += loss_components["var_loss"]
+            cov_train_loss += loss_components["cov_loss"]
+            train_loss += loss_components["loss"]
 
         if scheduler:
             scheduler.step()
@@ -75,29 +89,46 @@ def train_vicreg(
         if run_test:
             model.eval()
             with torch.no_grad():
-                inv_loss, var_loss, cov_loss, test_loss = 0.0, 0.0, 0.0, 0.0
+                inv_test_loss, var_test_loss, cov_test_loss, test_test_loss = (
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                )
                 for i, (x1, x2) in enumerate(test_loader):
                     x1, x2 = x1.to(device), x2.to(device)
                     z1, z2 = model(x1), model(x2)
                     _, loss_components = loss_function_detailed(z1, z2)
-                    inv_loss += loss_components["inv_loss"]
-                    var_loss += loss_components["var_loss"]
-                    cov_loss += loss_components["cov_loss"]
-                    test_loss += loss_components["loss"]
+                    inv_test_loss += loss_components["inv_loss"]
+                    var_test_loss += loss_components["var_loss"]
+                    cov_test_loss += loss_components["cov_loss"]
+                    test_test_loss += loss_components["loss"]
 
-                recorder.loc[epoch] = {
-                    "epoch": epoch,
-                    "epoch_loss": epoch_loss,
-                    "inv_loss": inv_loss,
-                    "var_loss": var_loss,
-                    "cov_loss": cov_loss,
-                    "test_loss": test_loss,
-                }
-                clear_output(wait=True)
-                px.line(
-                    recorder,
-                    y=["epoch_loss", "inv_loss", "var_loss", "cov_loss", "test_loss"],
-                ).show()
+            recorder.loc[epoch] = {
+                "epoch": epoch,
+                "train_loss": train_loss / len_train,
+                "inv_train_loss": inv_train_loss / len_train,
+                "var_train_loss": var_train_loss / len_train,
+                "cov_train_loss": cov_train_loss / len_train,
+                "test_loss": test_test_loss / len_test,
+                "inv_test_loss": inv_test_loss / len_test,
+                "var_test_loss": var_test_loss / len_test,
+                "cov_test_loss": cov_test_loss / len_test,
+            }
+            clear_output(wait=True)
+            px.line(
+                recorder,
+                y=[
+                    "train_loss",
+                    "inv_train_loss",
+                    "var_train_loss",
+                    "cov_tain_loss",
+                    "test_loss",
+                    "inv_test_loss",
+                    "var_test_loss",
+                    "cov_test_loss",
+                ],
+            ).show()
 
     return recorder
 
