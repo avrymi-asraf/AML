@@ -85,17 +85,30 @@ def visualize_representations(
     representations: np.ndarray,
     labels: np.ndarray,
     title: str = "Visualization of Representations",
+    class_names: List[str] = [
+        "airplane",
+        "automobile",
+        "bird",
+        "cat",
+        "deer",
+        "dog",
+        "frog",
+        "horse",
+        "ship",
+        "truck",
+    ],
 ) -> None:
     """
-    Visualize representations using PCA and t-SNE.
+    Visualize representations using PCA and t-SNE with a legend showing class names.
 
     Args:
         representations (np.ndarray): 2D array of representations.
         labels (np.ndarray): 1D array of corresponding labels.
         title (str): Title for the plots.
+        class_names (List[str]): List of class names corresponding to label indices.
 
     Returns:
-        None: Displays the PCA and t-SNE plots.
+        None: Displays the PCA and t-SNE plots with legends.
     """
     # Perform PCA
     pca = PCA(n_components=2)
@@ -122,6 +135,16 @@ def visualize_representations(
         }
     )
 
+    # If class_names are not provided, use default numbering
+    if class_names is None:
+        class_names = [f"Class {i}" for i in range(len(np.unique(labels)))]
+
+    # Create a color map
+    color_discrete_map = {
+        name: px.colors.qualitative.Plotly[i % len(px.colors.qualitative.Plotly)]
+        for i, name in enumerate(class_names)
+    }
+
     # Plot PCA results
     fig_pca = px.scatter(
         pca_df,
@@ -129,13 +152,20 @@ def visualize_representations(
         y="PCA Component 2",
         color="Class",
         title=f"PCA {title}",
+        color_discrete_map=color_discrete_map,
+        labels={"Class": ""},  # Remove "Class" label from legend
     )
+    fig_pca.update_traces(marker=dict(size=5))
     fig_pca.update_layout(
         width=800,
         height=800,
         xaxis=dict(scaleanchor="y", scaleratio=1),
         yaxis=dict(scaleanchor="x", scaleratio=1),
+        legend_title_text="Classes",
     )
+    # Update legend labels
+    for i, name in enumerate(class_names):
+        fig_pca.data[i].name = name
     fig_pca.show()
 
     # Plot t-SNE results
@@ -145,13 +175,20 @@ def visualize_representations(
         y="t-SNE Component 2",
         color="Class",
         title=f"t-SNE {title}",
+        color_discrete_map=color_discrete_map,
+        labels={"Class": ""},  # Remove "Class" label from legend
     )
+    fig_tsne.update_traces(marker=dict(size=5))
     fig_tsne.update_layout(
         width=800,
         height=800,
         xaxis=dict(scaleanchor="y", scaleratio=1),
         yaxis=dict(scaleanchor="x", scaleratio=1),
+        legend_title_text="Classes",
     )
+    # Update legend labels
+    for i, name in enumerate(class_names):
+        fig_tsne.data[i].name = name
     fig_tsne.show()
 
 
@@ -235,9 +272,9 @@ def visualize_roc(knn_density_cifar10, knn_density_mnist, method_name):
     """
     writed by chatgpt
     Args:
-    knn_density_cifar10 (np.ndarray): (n_samples,) 
+    knn_density_cifar10 (np.ndarray): (n_samples,)
     knn_density_mnist (np.ndarray): (n_samples,)
-    method_name (str): 
+    method_name (str):
 
     Returns:
     float: AUC score
@@ -294,10 +331,11 @@ from plotly.subplots import make_subplots
 import numpy as np
 import torch
 
+
 def unnormalize_image(img):
     """
     Unnormalize an image tensor.
-    
+
     Args:
     img (torch.Tensor): Normalized image tensor
 
@@ -309,7 +347,14 @@ def unnormalize_image(img):
     img = img * std[:, None, None] + mean[:, None, None]
     return (img.clip(0, 1) * 255).byte().permute(1, 2, 0).cpu().numpy()
 
-def visualize_most_anomalous_samples(cifar10_test_dataset, mnist_test_dataset, vic_reg_scores, near_neig_scores, num_samples=7):
+
+def visualize_most_anomalous_samples(
+    cifar10_test_dataset,
+    mnist_test_dataset,
+    vic_reg_scores,
+    near_neig_scores,
+    num_samples=7,
+):
     """
     Plot the most anomalous samples according to VICReg and VICReg without generated neighbors using Plotly.
     Images are unnormalized before plotting.
@@ -324,29 +369,39 @@ def visualize_most_anomalous_samples(cifar10_test_dataset, mnist_test_dataset, v
     Returns:
     None: Displays the interactive Plotly plot
     """
-    assert len(vic_reg_scores) == len(near_neig_scores), "Scores must have the same length"
+    assert len(vic_reg_scores) == len(
+        near_neig_scores
+    ), "Scores must have the same length"
 
     vic_reg_anomalous_indices = np.argsort(vic_reg_scores)[-num_samples:]
     near_neig_anomalous_indices = np.argsort(near_neig_scores)[-num_samples:]
 
     fig = make_subplots(
-        rows=2, cols=num_samples,
-        subplot_titles=[f'VICReg: {vic_reg_scores[i]:.2f}' for i in reversed(vic_reg_anomalous_indices)] +
-                       [f'Near Neighbor: {near_neig_scores[i]:.2f}' for i in reversed(near_neig_anomalous_indices)],
-        vertical_spacing=0.1
+        rows=2,
+        cols=num_samples,
+        subplot_titles=[
+            f"VICReg: {vic_reg_scores[i]:.2f}"
+            for i in reversed(vic_reg_anomalous_indices)
+        ]
+        + [
+            f"Near Neighbor: {near_neig_scores[i]:.2f}"
+            for i in reversed(near_neig_anomalous_indices)
+        ],
+        vertical_spacing=0.1,
     )
 
-    combined_dataset = torch.utils.data.ConcatDataset([cifar10_test_dataset, mnist_test_dataset])
+    combined_dataset = torch.utils.data.ConcatDataset(
+        [cifar10_test_dataset, mnist_test_dataset]
+    )
 
-    for i, indices in enumerate([vic_reg_anomalous_indices, near_neig_anomalous_indices]):
+    for i, indices in enumerate(
+        [vic_reg_anomalous_indices, near_neig_anomalous_indices]
+    ):
         for j, sample_idx in enumerate(reversed(indices)):
             img, _ = combined_dataset[sample_idx]
             img_array = unnormalize_image(img)
-            
-            fig.add_trace(
-                go.Image(z=img_array),
-                row=i+1, col=j+1
-            )
+
+            fig.add_trace(go.Image(z=img_array), row=i + 1, col=j + 1)
 
     fig.update_layout(
         title_text="Most Anomalous Samples",
@@ -358,6 +413,7 @@ def visualize_most_anomalous_samples(cifar10_test_dataset, mnist_test_dataset, v
     fig.update_yaxes(showticklabels=False)
 
     fig.show()
+
 
 # Usage example:
 # plot_most_anomalous_samples(cifar10_test_dataset, mnist_test_dataset, vic_reg_scores, near_neig_scores)
