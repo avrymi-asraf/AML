@@ -122,7 +122,7 @@ def train_vicreg(
                     "train_loss",
                     "inv_train_loss",
                     "var_train_loss",
-                    "cov_tain_loss",
+                    "cov_train_loss",
                     "test_loss",
                     "inv_test_loss",
                     "var_test_loss",
