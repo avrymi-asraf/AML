@@ -6,9 +6,11 @@ from torch import nn
 from typing import Literal, List, Tuple
 from src.data_load import load_cifar10
 import plotly.express as px
+import plotly.graph_objects as go
 from torch.utils.data import DataLoader
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
+from sklearn.metrics import roc_curve, auc
 
 
 def visualize_linear_probe_predictions(
@@ -198,8 +200,7 @@ def visualize_retrieval_results(samples, train_dataset, num_neighbors=5):
             for j in range(num_neighbors):
                 if j < len(neighbors):
                     neighbor_image = neighbors[j]
-                    axes[idx, start_col + j].imshow(
-                        neighbor_image)
+                    axes[idx, start_col + j].imshow(neighbor_image)
                     axes[idx, start_col + j].set_title(f"{title_prefix} {j+1}")
                 axes[idx, start_col + j].axis("off")
 
@@ -227,5 +228,62 @@ def visualize_retrieval_results(samples, train_dataset, num_neighbors=5):
             "NearNeig\nFarthest",
         )
 
-    plt.tight_layout()
     plt.show()
+
+
+def visualize_roc(knn_density_cifar10, knn_density_mnist, method_name):
+    """
+    writed by chatgpt
+    Args:
+    knn_density_cifar10 (np.ndarray): (n_samples,) 
+    knn_density_mnist (np.ndarray): (n_samples,)
+    method_name (str): 
+
+    Returns:
+    float: AUC score
+    """
+    scores = np.concatenate([knn_density_cifar10, knn_density_mnist])
+    labels = np.concatenate(
+        [np.zeros(len(knn_density_cifar10)), np.ones(len(knn_density_mnist))]
+    )
+
+    fpr, tpr, _ = roc_curve(labels, scores)
+    roc_auc = auc(fpr, tpr)
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=fpr,
+            y=tpr,
+            mode="lines",
+            name=f"{method_name} (AUC = {roc_auc:.2f})",
+            line=dict(color="blue", width=2),
+        )
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=[0, 1],
+            y=[0, 1],
+            mode="lines",
+            name="Random Classifier",
+            line=dict(color="gray", width=2, dash="dash"),
+        )
+    )
+
+    fig.update_layout(
+        title=f"Receiver Operating Characteristic (ROC) Curve - {method_name}",
+        xaxis_title="False Positive Rate",
+        yaxis_title="True Positive Rate",
+        legend=dict(x=0.7, y=0.1),
+        width=800,
+        height=600,
+        xaxis=dict(range=[0, 1]),
+        yaxis=dict(range=[0, 1.05]),
+    )
+
+    fig.show()
+
+    print(f"{method_name} AUC: {roc_auc:.4f}")
+
+    return roc_auc
