@@ -102,7 +102,7 @@ def compute_knn_density(
     train_representations: np.ndarray,
     test_representations: np.ndarray,
     k: int = 2,
-    reduce: str = "mean",
+    reduce: Optional[str] = "mean",
 ) -> np.ndarray:
     """
     Compute kNN density test in train
@@ -116,14 +116,13 @@ def compute_knn_density(
     Returns:
         float: mean of knn density
     """
-    # Use FAISS for efficient nearest neighbor search
     index = faiss.IndexFlatL2(train_representations.shape[1])
     index.add(train_representations.astype(np.float32))
     distances, _ = index.search(test_representations.astype(np.float32), k + 1)
     if reduce == "mean":
         return np.mean(distances[:, 1:])
     else:
-        return distances[:, 1:]
+        return np.mean(distances[:, 1:],axis=1)
 
 
 def select_samples_by_class(dataset: Dataset) -> Dict[int, Dict[str, Any]]:
